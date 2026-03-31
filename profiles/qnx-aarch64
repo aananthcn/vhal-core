@@ -1,0 +1,16 @@
+[settings]
+os=Neutrino
+os.version=8.0
+arch=armv8
+compiler=qcc
+compiler.version=12.2
+compiler.libcxx=libstdc++11
+build_type=Release
+
+[buildenv]
+CC=qcc -Vgcc_ntoaarch64le
+CXX=q++ -Vgcc_ntoaarch64le
+STRIP=ntoaarch64-strip
+
+# QNX SDP must be sourced before invoking Conan:
+#   source $QNX_SDP_ROOT/qnxsdp-env.sh

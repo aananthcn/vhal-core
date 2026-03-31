@@ -1,6 +1,23 @@
 # vhal-core
 The core of Android's VHAL, with gRPC, to be used in Linux and QNX.
 
+# How to build
+## Native / Linux
+```
+conan profile detect
+
+# Install dependencies
+conan install . --output-folder=build/Release --build=missing
+
+# Configure
+cmake -B build/Release \
+    -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmake \
+    -DCMAKE_BUILD_TYPE=Release
+
+# Build
+cmake --build build -j$(nproc)
+```
+
 # Architecture & Intent
 ## Block diagram
 
@@ -29,7 +46,9 @@ The core of Android's VHAL, with gRPC, to be used in Linux and QNX.
 
 ## Source Structure
 This project is a Linux/QNX port of Android 16 VHAL using gRPC as the transport layer, replacing Android's Binder/AIDL IPC. The source is selectively extracted from AOSP at:
+```
 hardware/interfaces/automotive/vehicle/
+```
 
 ### Folder Structure
 ```
