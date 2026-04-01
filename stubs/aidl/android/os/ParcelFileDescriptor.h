@@ -14,5 +14,6 @@ struct ParcelFileDescriptor {
     int get() const { return fd; }
     bool operator==(const ParcelFileDescriptor& o) const { return fd == o.fd; }
     bool operator!=(const ParcelFileDescriptor& o) const { return !(*this == o); }
+    bool operator<(const ParcelFileDescriptor& o) const { return fd < o.fd; }
 };
 }}}

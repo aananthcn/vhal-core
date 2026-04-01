@@ -212,17 +212,17 @@ def parse_enum_values(block: str) -> list:
     return results
 
 
-def parse_parcelable_fields(block: str, import_map: dict = None) -> list:
+def parse_parcelable_fields(block: str, import_map: dict = None) -> tuple:
     """
     Parse parcelable body into list of (cpp_type, name, default_value, doc) tuples.
     import_map: simple_name -> fully_qualified (e.g. ParcelFileDescriptor -> android.os.ParcelFileDescriptor)
+    Returns: (fields_list, has_optional) where has_optional is True if any field uses std::optional.
     """
     if import_map is None:
         import_map = {}
     results = []
-    # Remove annotations on field lines like @utf8InCpp
-    clean = re.sub(r"@\w+(?:\([^)]*\))?\s*", "", block)
-    lines = clean.split("\n")
+    has_optional = False
+    lines = block.split("\n")
     pending_comment = []
 
     for line in lines:
@@ -235,29 +235,32 @@ def parse_parcelable_fields(block: str, import_map: dict = None) -> list:
             pending_comment.append(stripped)
             continue
 
+        # Detect @nullable before stripping annotations
+        is_nullable = "@nullable" in stripped
+
+        # Strip all annotations from the line
+        clean_stripped = re.sub(r"@\w+(?:\([^)]*\))?\s*", "", stripped).strip()
+
         # Const field: const int FOO = value;  → static constexpr int32_t FOO = value;
-        const_m = re.match(r"^const\s+([\w]+)\s+(\w+)\s*=\s*([^;]+?)\s*;", stripped)
+        const_m = re.match(r"^const\s+([\w]+)\s+(\w+)\s*=\s*([^;]+?)\s*;", clean_stripped)
         if const_m:
             raw_type = const_m.group(1).strip()
             name = const_m.group(2).strip()
             value = const_m.group(3).strip()
             cpp_type = aidl_type_to_cpp(raw_type)
             doc = " ".join(pending_comment) if pending_comment else ""
-            # Mark as const with sentinel default so emitter treats it as static constexpr
             results.append((f"static constexpr {cpp_type}", name, value, doc))
             pending_comment = []
             continue
 
         # Field declaration: type name; or type name = default;
-        # Handles: int foo; float[] bar = {}; String baz = "x";
-        m = re.match(r"^([\w.<>]+(?:\[\])?)\s+(\w+)\s*(?:=\s*([^;]+?))?\s*;", stripped)
+        m = re.match(r"^([\w.<>]+(?:\[\])?)\s+(\w+)\s*(?:=\s*([^;]+?))?\s*;", clean_stripped)
         if m:
             raw_type = m.group(1).strip()
             name = m.group(2).strip()
             default = m.group(3).strip() if m.group(3) else None
 
             # Convert AIDL enum default value syntax: Foo.BAR → Foo::BAR
-            # e.g. VehiclePropertyStatus.AVAILABLE → VehiclePropertyStatus::AVAILABLE
             if default and re.match(r"^[A-Z]\w+\.[A-Z_][A-Z0-9_]*$", default):
                 default = default.replace(".", "::")
 
@@ -265,12 +268,29 @@ def parse_parcelable_fields(block: str, import_map: dict = None) -> list:
             resolved_type = raw_type
             if raw_type in import_map:
                 resolved_type = import_map[raw_type]
-            cpp_type = aidl_type_to_cpp(resolved_type)
+
+            if is_nullable:
+                # @nullable List<T> → std::optional<std::vector<std::optional<T>>>
+                # (elements are also optional to match Android AIDL NDK backend behavior)
+                list_m = re.match(r"List<(.+)>$", raw_type)
+                if list_m:
+                    inner_type = list_m.group(1).strip()
+                    inner_resolved = import_map.get(inner_type, inner_type)
+                    inner_cpp = aidl_type_to_cpp(inner_resolved)
+                    cpp_type = f"std::optional<std::vector<std::optional<{inner_cpp}>>>"
+                else:
+                    # @nullable T or @nullable T[] → std::optional<cpp_type>
+                    cpp_type = f"std::optional<{aidl_type_to_cpp(resolved_type)}>"
+                default = "std::nullopt"
+                has_optional = True
+            else:
+                cpp_type = aidl_type_to_cpp(resolved_type)
+
             doc = " ".join(pending_comment) if pending_comment else ""
             results.append((cpp_type, name, default, doc))
             pending_comment = []
 
-    return results
+    return results, has_optional
 
 
 def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
@@ -323,6 +343,7 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
     lines.append(f"#define {guard}")
     lines.append(f"")
     lines.append(f"#include <cstdint>")
+    lines.append(f"#include <optional>")
     lines.append(f"#include <ostream>")
     lines.append(f"#include <string>")
     lines.append(f"#include <type_traits>")
@@ -396,6 +417,12 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
         lines.append(f"    return static_cast<{enum_name}>(")
         lines.append(f"        static_cast<{cpp_backing}>(a) & static_cast<{cpp_backing}>(b));")
         lines.append(f"}}")
+        lines.append(f"inline bool operator<({enum_name} a, {enum_name} b) {{")
+        lines.append(f"    return static_cast<{cpp_backing}>(a) < static_cast<{cpp_backing}>(b);")
+        lines.append(f"}}")
+        lines.append(f"inline bool operator!=({enum_name} a, {enum_name} b) {{")
+        lines.append(f"    return static_cast<{cpp_backing}>(a) != static_cast<{cpp_backing}>(b);")
+        lines.append(f"}}")
         lines.append(f"")
 
         # toString() — AIDL-generated debug helper, returns enum name as string
@@ -441,7 +468,7 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
             return False
         body, _ = extract_block(original, brace_pos)
 
-        fields = parse_parcelable_fields(body, import_map)
+        fields, _ = parse_parcelable_fields(body, import_map)
 
         lines.append(f"struct {parcelable_name} {{")
         for cpp_type, name, default, doc in fields:
@@ -483,6 +510,13 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
         lines.append(f"    os << \"{parcelable_name}{{}}\" ;")
         lines.append(f"    return os;")
         lines.append(f"}}")
+        # operator< — required for use in std::set, std::map, and ordered containers
+        lines.append(f"inline bool operator<(const {parcelable_name}& lhs, const {parcelable_name}& rhs) {{")
+        if field_names:
+            for n in field_names:
+                lines.append(f"    if (lhs.{n} != rhs.{n}) return lhs.{n} < rhs.{n};")
+        lines.append(f"    return false;")
+        lines.append(f"}}")
         lines.append(f"")
 
     # ── Interface ────────────────────────────────────────────────────────────
@@ -510,23 +544,21 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
             method_name = method_m.group(2).strip()
             params = method_m.group(3).strip()
 
-            # Convert return type
             # All AIDL interface methods return ndk::ScopedAStatus
             cpp_ret = "ndk::ScopedAStatus"
 
-            # Non-void return types become output pointer params (_aidl_return)
+            # Non-void return types become output pointer params appended after all others.
+            # Kept separate so they are NOT wrapped with const-ref by the param loop below.
+            extra_param = None
             if ret_type != "void":
                 cpp_return_type = aidl_type_to_cpp(ret_type)
                 extra_param = f"{cpp_return_type}* _aidl_return"
-                if params.strip():
-                    params = params + ", " + extra_param
-                else:
-                    params = extra_param
 
             # Strip AIDL direction annotations from params: in, out, inout
             params = re.sub(r"\b(?:in|out|inout)\b\s*", "", params).strip()
             # Convert param types
             cpp_params = []
+            SCALARS = {"bool","int8_t","uint8_t","int16_t","uint16_t","int32_t","uint32_t","int64_t","uint64_t","float","double","char16_t"}
             for param in params.split(","):
                 param = param.strip()
                 if not param:
@@ -538,13 +570,22 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
                     # Handle List<T> -> std::vector<T>
                     ptype = re.sub(r"List<(.+)>", lambda m: f"std::vector<{aidl_type_to_cpp(m.group(1).strip())}>", ptype)
                     cpp_type_p = aidl_type_to_cpp(ptype.strip())
-                    SCALARS = {"bool","int8_t","uint8_t","int16_t","uint16_t","int32_t","uint32_t","int64_t","uint64_t","float","double","char16_t"}
+                    # Interface types (I + UpperCase) are passed as const std::shared_ptr<T>&
+                    # to match Android NDK AIDL backend behavior
+                    unqualified = cpp_type_p.split("::")[-1]
+                    is_iface = len(unqualified) > 1 and unqualified[0] == "I" and unqualified[1].isupper()
                     if cpp_type_p in SCALARS:
                         cpp_params.append(f"{cpp_type_p} {pname}")
+                    elif is_iface:
+                        cpp_params.append(f"const std::shared_ptr<{cpp_type_p}>& {pname}")
                     else:
                         cpp_params.append(f"const {cpp_type_p}& {pname}")
                 else:
                     cpp_params.append(param)
+
+            # Append output param last, as a plain pointer (not const-ref wrapped)
+            if extra_param:
+                cpp_params.append(extra_param)
 
             param_str = ", ".join(cpp_params)
             lines.append(f"    virtual {cpp_ret} {method_name}({param_str}) = 0;")

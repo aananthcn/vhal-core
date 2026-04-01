@@ -431,6 +431,14 @@ target_link_libraries(VehicleHalJsonConfigLoader
 
 target_compile_options(VehicleHalJsonConfigLoader PRIVATE -Wno-unused-parameter)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# VHAL config root — override with -DVHAL_CONFIG_ROOT=/etc/vhal for release/RPi
+# ──────────────────────────────────────────────────────────────────────────────
+set(VHAL_CONFIG_ROOT "${CMAKE_SOURCE_DIR}/etc/vhal" CACHE STRING
+    "Root directory for VHAL runtime config files (vhalconfig/, vhaloverride/, powercontroller/)")
+
+message(STATUS "VHAL_CONFIG_ROOT: ${VHAL_CONFIG_ROOT}")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # LAYER 7   FakeVehicleHardware
 # Mirrors:  cc_library { name: "FakeVehicleHardware" }
@@ -464,6 +472,10 @@ target_link_libraries(FakeVehicleHardware
         gRPC::grpc++
         JsonCpp::JsonCpp
         protobuf::libprotobuf
+)
+
+target_compile_definitions(FakeVehicleHardware PRIVATE
+    VHAL_CONFIG_ROOT="${VHAL_CONFIG_ROOT}"
 )
 
 target_compile_options(FakeVehicleHardware PRIVATE -Wno-unused-parameter)

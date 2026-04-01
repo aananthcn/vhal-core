@@ -23,7 +23,7 @@ cmake -B build/Release \
     -DCMAKE_BUILD_TYPE=Release
 
 # Build
-cmake --build build -j$(nproc)
+cmake --build build/Release -j$(nproc)
 ```
 
 # Architecture & Intent

@@ -452,7 +452,7 @@ ScopedAStatus DefaultVehicleHal::getAllPropConfigs(VehiclePropConfigs* output) {
 
     if (mConfigFile != nullptr) {
         output->payloads.clear();
-        output->sharedMemoryFd.set(dup(mConfigFile->get()));
+        output->sharedMemoryFd = aidl::android::os::ParcelFileDescriptor(dup(mConfigFile->get()));
         return ScopedAStatus::ok();
     }
 
