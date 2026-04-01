@@ -48,6 +48,62 @@ set(GRPC_GEN_DIR    ${CMAKE_BINARY_DIR}/generated/grpc)
 file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
 file(MAKE_DIRECTORY ${GRPC_GEN_DIR})
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AIDL LAYER 0: Generate C++ headers from aidl_property/ .aidl files
+#
+# Uses the AOSP aidl host tool to generate:
+#   aidl/android/hardware/automotive/vehicle/Foo.h
+# for every Foo.aidl in aidl_property/
+#
+# Output lands in:
+#   ${CMAKE_BINARY_DIR}/generated/aidl/
+# which is added as an include path to VehicleHalUtils and all consumers.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# AIDL LAYER 0 — generate headers via Python script
+find_package(Python3 REQUIRED)
+
+set(AIDL_GEN_DIR ${CMAKE_BINARY_DIR}/generated)
+
+execute_process(
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_aidl_headers.py
+            --input  ${CMAKE_CURRENT_SOURCE_DIR}/aidl_property
+            --output ${AIDL_GEN_DIR}
+    RESULT_VARIABLE AIDL_GEN_RESULT1
+)
+if(NOT AIDL_GEN_RESULT1 EQUAL 0)
+    message(FATAL_ERROR "AIDL header generation failed")
+endif()
+
+# Also generate headers from aidl/android/ (interface types)
+execute_process(
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_aidl_headers.py
+            --input  ${CMAKE_CURRENT_SOURCE_DIR}/aidl
+            --output ${AIDL_GEN_DIR}
+    RESULT_VARIABLE AIDL_GEN_RESULT2
+)
+if(NOT AIDL_GEN_RESULT2 EQUAL 0)
+    message(FATAL_ERROR "AIDL interface header generation failed")
+endif()
+
+
+add_library(AidlPropertyHeaders INTERFACE)
+target_include_directories(AidlPropertyHeaders INTERFACE ${AIDL_GEN_DIR})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stub headers — Android-specific headers replaced with Linux-compatible stubs
+# ──────────────────────────────────────────────────────────────────────────────
+set(STUBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/stubs)
+
+add_library(AndroidStubs INTERFACE)
+target_include_directories(AndroidStubs INTERFACE ${STUBS_DIR})
+
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # LAYER 5   VehicleHalUtils
 # Mirrors:  cc_library { name: "VehicleHalUtils" }
@@ -65,10 +121,18 @@ file(GLOB UTILS_SRCS "${UTILS_DIR}/src/*.cpp")
 add_library(VehicleHalUtils STATIC ${UTILS_SRCS})
 
 target_include_directories(VehicleHalUtils
-    PUBLIC  ${UTILS_DIR}/include
+    PUBLIC
+		${UTILS_DIR}/include
+		${STUBS_DIR}
 )
 
 target_compile_options(VehicleHalUtils PRIVATE -Wno-unused-parameter)
+
+target_link_libraries(VehicleHalUtils
+    PUBLIC
+        AidlPropertyHeaders         # aidl/ generated headers
+        AndroidStubs                # thread_annotations.h, utils/Log.h stubs
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LAYER 5b  VehicleHalUtilHeaders  (header-only)

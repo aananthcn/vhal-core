@@ -1,7 +1,15 @@
 # vhal-core
 The core of Android's VHAL, with gRPC, to be used in Linux and QNX.
 
+
 # How to build
+
+## Prerequisite
+```
+sudo apt install build-essential cmake
+```
+
+
 ## Native / Linux
 ```
 conan profile detect

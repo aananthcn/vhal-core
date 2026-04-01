@@ -29,6 +29,7 @@ namespace vehicle {
 namespace fake {
 
 using ::aidl::android::hardware::automotive::vehicle::VehiclePropertyType;
+using ::aidl::android::hardware::automotive::vehicle::VehicleProperty;
 using ::aidl::android::hardware::automotive::vehicle::VehiclePropValue;
 
 LinearFakeValueGenerator::LinearFakeValueGenerator(int32_t propId, float middleValue,
