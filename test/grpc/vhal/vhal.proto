@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package android.hardware.automotive.vehicle;
+
+service VehicleService {
+  // Get a specific property value
+  rpc GetPropertyValue (GetValueRequest) returns (VehiclePropValue);
+  
+  // Set a specific property value
+  rpc SetPropertyValue (SetValueRequest) returns (Status);
+}
+
+message GetValueRequest {
+  int32 prop_id = 1;
+  int32 area_id = 2;
+}
+
+message SetValueRequest {
+  VehiclePropValue value = 1;
+}
+
+message VehiclePropValue {
+  int32 prop_id = 1;
+  int32 area_id = 2;
+  int64 timestamp = 3;
+  oneof value {
+    int32 int32_value = 4;
+    float float_value = 5;
+    string string_value = 6;
+  }
+}
+
+message Status {
+  enum Code {
+    OK = 0;
+    INVALID_ARG = 1;
+    NOT_AVAILABLE = 2;
+  }
+  Code code = 1;
+}

@@ -385,7 +385,7 @@ GrpcVehicleProxyServer& GrpcVehicleProxyServer::Shutdown() {
 }
 
 void GrpcVehicleProxyServer::Wait() {
-    LOG(INFO) << __func__ << ": Waiting for server to shutdown";
+    LOG(INFO) << __func__ << ": gRPC server is active and waiting for connections";
     if (mServer) {
         mServer->Wait();
     }

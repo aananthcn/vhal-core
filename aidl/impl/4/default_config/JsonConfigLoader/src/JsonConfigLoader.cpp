@@ -196,6 +196,18 @@ class ConstantParser final : public ConstantParserInterface {
     std::unordered_map<std::string, int> mValueByName;
 };
 
+// VehicleProperty has aliased values (FUEL_DOOR_OPEN == RANGE_REMAINING integer-wise).
+// toString() can only return one name per integer, so explicitly add both aliases.
+template <>
+ConstantParser<VehicleProperty>::ConstantParser() {
+    for (const VehicleProperty& v : ndk::enum_range<VehicleProperty>()) {
+        std::string name = aidl::android::hardware::automotive::vehicle::toString(v);
+        mValueByName[name] = toInt(v);
+    }
+    mValueByName["FUEL_DOOR_OPEN"] = toInt(VehicleProperty::FUEL_DOOR_OPEN);
+    mValueByName["RANGE_REMAINING"] = toInt(VehicleProperty::RANGE_REMAINING);
+}
+
 #ifdef ENABLE_VEHICLE_HAL_TEST_PROPERTIES
 // A class to parse constant values for type T where T is defined as an enum in CPP AIDL backend.
 template <class T>

@@ -194,7 +194,7 @@ def parse_enum_values(block: str) -> list:
             pending_comment = []
             results.append((pending_name, None, pending_doc))
         elif results and results[-1][1] is None and not re.match(r"^[A-Z_][A-Z0-9_]*\s*$", stripped_raw):
-            # Continuation value for previous NAME = entry
+            # Continuation value for previous NAME = entry (NAME = \n VALUE)
             name, _, doc = results[-1]
             value = stripped_raw.rstrip(",").strip()
             value = re.sub(
@@ -203,6 +203,16 @@ def parse_enum_values(block: str) -> list:
                 value
             )
             results[-1] = (name, value, doc)
+        elif results and results[-1][1] is not None and re.match(r"^[+|]", stripped_raw):
+            # Continuation of a multi-line value expression (e.g. + 0x00100000, // comment)
+            name, prev_val, doc = results[-1]
+            cont = re.sub(r"\s*//.*$", "", stripped_raw).rstrip(",").strip()
+            cont = re.sub(
+                r"([A-Z]\w+)\.([A-Z_][A-Z0-9_]*)",
+                r"static_cast<int32_t>(\1::\2)",
+                cont
+            )
+            results[-1] = (name, f"{prev_val} {cont}", doc)
         elif re.match(r"^\w+$", stripped_raw):
             # Name only (auto-increment)
             doc = " ".join(pending_comment) if pending_comment else ""
@@ -342,6 +352,7 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
     lines.append(f"#ifndef {guard}")
     lines.append(f"#define {guard}")
     lines.append(f"")
+    lines.append(f"#include <android/binder_enums.h>")
     lines.append(f"#include <cstdint>")
     lines.append(f"#include <optional>")
     lines.append(f"#include <ostream>")
@@ -362,6 +373,7 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
     lines.append(f"")
 
     # ── Enum ──────────────────────────────────────────────────────────────────
+    enum_range_info = None
     if enum_m:
         # Re-search on original for backing type (annotations stripped in text)
         backing_m = re.search(r'@Backing\s*\(\s*type\s*=\s*"(\w+)"\s*\)', original)
@@ -453,10 +465,18 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
             lines.append(f"        default: return std::to_string(static_cast<{cpp_backing}>(val));")
             lines.append(f"    }}")
         else:
-            # Complex/computed enum values — numeric fallback only
+            # Complex/computed enum values — use if-else chain to avoid duplicate case label errors
+            first = True
+            for vname, _, _ in values:
+                if first:
+                    lines.append(f"    if (val == {enum_name}::{vname}) return \"{vname}\";")
+                    first = False
+                else:
+                    lines.append(f"    else if (val == {enum_name}::{vname}) return \"{vname}\";")
             lines.append(f"    return std::to_string(static_cast<{cpp_backing}>(val));")
         lines.append(f"}}")
         lines.append(f"")
+        enum_range_info = (enum_name, cpp_backing, values)
 
     # ── Parcelable ────────────────────────────────────────────────────────────
     elif parcelable_m:
@@ -603,6 +623,20 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
         lines.append(f"}} // namespace {ns}")
     lines.append(f"}} // namespace aidl")
     lines.append(f"")
+    if enum_range_info is not None:
+        ename, ebacking, evalues = enum_range_info
+        full_type = "::aidl::" + "::".join(namespaces) + "::" + ename
+        lines.append(f"namespace ndk {{")
+        lines.append(f"template <>")
+        lines.append(f"inline ::ndk::EnumRange<{full_type}> enum_range<{full_type}>() {{")
+        lines.append(f"    static const {full_type} kVals[] = {{")
+        for vname, _, _ in evalues:
+            lines.append(f"        {full_type}::{vname},")
+        lines.append(f"    }};")
+        lines.append(f"    return ::ndk::EnumRange<{full_type}>(kVals, sizeof(kVals) / sizeof(kVals[0]));")
+        lines.append(f"}}")
+        lines.append(f"}} // namespace ndk")
+        lines.append(f"")
     lines.append(f"#endif // {guard}")
     lines.append(f"")
 
