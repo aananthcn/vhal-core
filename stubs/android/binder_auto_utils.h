@@ -3,16 +3,9 @@
 #pragma once
 #include <string>
 #include <cstdint>
-
-#include <android/binder_enums.h>
-
-// Android binder status codes
-typedef int32_t binder_status_t;
-static constexpr binder_status_t STATUS_OK = 0;
-static constexpr binder_status_t STATUS_UNKNOWN_ERROR = (-2147483647 - 1);
+#include <android/binder_ibinder.h>
 
 namespace ndk {
-
 class ScopedAStatus {
 public:
     ScopedAStatus() : status_(STATUS_OK) {}
@@ -75,3 +68,42 @@ static constexpr int32_t EX_TRANSACTION_FAILED = -129;
 } // namespace binder
 } // namespace android
 
+// Pull binder exception codes into global scope for code that uses them unqualified
+using android::binder::Status::EX_NONE;
+using android::binder::Status::EX_SECURITY;
+using android::binder::Status::EX_BAD_PARCELABLE;
+using android::binder::Status::EX_ILLEGAL_ARGUMENT;
+using android::binder::Status::EX_NULL_POINTER;
+using android::binder::Status::EX_ILLEGAL_STATE;
+using android::binder::Status::EX_UNSUPPORTED_OPERATION;
+using android::binder::Status::EX_SERVICE_SPECIFIC;
+using android::binder::Status::EX_PARCELABLE;
+using android::binder::Status::EX_TRANSACTION_FAILED;
+
+// SpAIBinder — strong pointer to AIBinder
+namespace ndk {
+class SpAIBinder {
+public:
+    SpAIBinder() : ptr_(nullptr) {}
+    explicit SpAIBinder(AIBinder* ptr) : ptr_(ptr) {}
+    AIBinder* get() const { return ptr_; }
+    explicit operator bool() const { return ptr_ != nullptr; }
+private:
+    AIBinder* ptr_;
+};
+} // namespace ndk
+
+#include <android/binder_enums.h>
+
+// ScopedFileDescriptor — wraps a file descriptor
+namespace ndk {
+class ScopedFileDescriptor {
+public:
+    ScopedFileDescriptor() : fd_(-1) {}
+    explicit ScopedFileDescriptor(int fd) : fd_(fd) {}
+    int get() const { return fd_; }
+    bool isValid() const { return fd_ >= 0; }
+private:
+    int fd_;
+};
+} // namespace ndk

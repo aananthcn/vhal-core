@@ -170,18 +170,15 @@ def parse_enum_values(block: str) -> list:
             continue
 
         # Value line — may end with comma
-        stripped = stripped.rstrip(",").strip()
-        if not stripped:
+        stripped_raw = stripped.rstrip(",").strip()
+        if not stripped_raw:
             continue
 
-        # Match: NAME = VALUE or NAME = VALUE, // comment
-        m = re.match(r"^(\w+)\s*=\s*([^,/\n]+?)(?:\s*//.*)?$", stripped)
+        # Match: NAME = VALUE or NAME = VALUE, // comment (single line)
+        m = re.match(r"^(\w+)\s*=\s*([^,/\n]+?)(?:\s*//.*)?$", stripped_raw)
         if m:
             name = m.group(1).strip()
             value = m.group(2).strip()
-            # Convert AIDL dot enum refs in value expressions: Foo.BAR -> (int32_t)Foo::BAR
-            # e.g. VehicleArea.GLOBAL | VehiclePropertyType.INT32
-            # Cast to int32_t to allow mixing different enum class types in bitwise OR
             value = re.sub(
                 r"([A-Z]\w+)\.([A-Z_][A-Z0-9_]*)",
                 r"static_cast<int32_t>(\1::\2)",
@@ -190,10 +187,26 @@ def parse_enum_values(block: str) -> list:
             doc = " ".join(pending_comment) if pending_comment else ""
             results.append((name, value, doc))
             pending_comment = []
-        elif re.match(r"^\w+$", stripped):
-            # Name only (auto-increment) — rare in AIDL but handle it
+        elif re.match(r"^(\w+)\s*=$", stripped_raw):
+            # NAME = with value on next line
+            pending_name = re.match(r"^(\w+)\s*=$", stripped_raw).group(1)
+            pending_doc = " ".join(pending_comment) if pending_comment else ""
+            pending_comment = []
+            results.append((pending_name, None, pending_doc))
+        elif results and results[-1][1] is None and not re.match(r"^[A-Z_][A-Z0-9_]*\s*$", stripped_raw):
+            # Continuation value for previous NAME = entry
+            name, _, doc = results[-1]
+            value = stripped_raw.rstrip(",").strip()
+            value = re.sub(
+                r"([A-Z]\w+)\.([A-Z_][A-Z0-9_]*)",
+                r"static_cast<int32_t>(\1::\2)",
+                value
+            )
+            results[-1] = (name, value, doc)
+        elif re.match(r"^\w+$", stripped_raw):
+            # Name only (auto-increment)
             doc = " ".join(pending_comment) if pending_comment else ""
-            results.append((stripped, None, doc))
+            results.append((stripped_raw, None, doc))
             pending_comment = []
 
     return results
@@ -310,6 +323,7 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
     lines.append(f"#define {guard}")
     lines.append(f"")
     lines.append(f"#include <cstdint>")
+    lines.append(f"#include <ostream>")
     lines.append(f"#include <string>")
     lines.append(f"#include <type_traits>")
     lines.append(f"#include <vector>")
@@ -465,12 +479,82 @@ def generate_header(aidl_path: str, input_root: str, output_root: str) -> bool:
         lines.append(f"inline bool operator!=(const {parcelable_name}& lhs, const {parcelable_name}& rhs) {{")
         lines.append(f"    return !(lhs == rhs);")
         lines.append(f"}}")
+        lines.append(f"inline std::ostream& operator<<(std::ostream& os, const {parcelable_name}& /*v*/) {{")
+        lines.append(f"    os << \"{parcelable_name}{{}}\" ;")
+        lines.append(f"    return os;")
+        lines.append(f"}}")
+        lines.append(f"")
+
+    # ── Interface ────────────────────────────────────────────────────────────
+    elif (interface_m := re.search(r"interface\s+(\w+)\s*\{", text)):
+        interface_name = interface_m.group(1)
+
+        # Extract method signatures from original for reference
+        brace_pos = original.find("{", original.find(f"interface {interface_name}"))
+        body, _ = extract_block(original, brace_pos)
+
+        lines.append(f"class {interface_name} {{")
+        lines.append(f"public:")
+        lines.append(f"    virtual ~{interface_name}() = default;")
+        lines.append(f"    // asBinder() — returns a weak AIBinder pointer for client identification")
+        lines.append(f"    virtual ndk::SpAIBinder asBinder() {{ return ndk::SpAIBinder(nullptr); }}")
+        lines.append(f"")
+
+        # Parse method signatures: oneway void methodName(args);
+        # Convert each to a pure virtual method
+        for method_m in re.finditer(
+            r"(?:oneway\s+)?(\w+)\s+(\w+)\s*\(([^)]*)\)\s*;",
+            strip_comments_for_parsing(body)
+        ):
+            ret_type = method_m.group(1).strip()
+            method_name = method_m.group(2).strip()
+            params = method_m.group(3).strip()
+
+            # Convert return type
+            # All AIDL interface methods return ndk::ScopedAStatus
+            cpp_ret = "ndk::ScopedAStatus"
+
+            # Non-void return types become output pointer params (_aidl_return)
+            if ret_type != "void":
+                cpp_return_type = aidl_type_to_cpp(ret_type)
+                extra_param = f"{cpp_return_type}* _aidl_return"
+                if params.strip():
+                    params = params + ", " + extra_param
+                else:
+                    params = extra_param
+
+            # Strip AIDL direction annotations from params: in, out, inout
+            params = re.sub(r"\b(?:in|out|inout)\b\s*", "", params).strip()
+            # Convert param types
+            cpp_params = []
+            for param in params.split(","):
+                param = param.strip()
+                if not param:
+                    continue
+                # Last word is param name, rest is type
+                parts = param.rsplit(None, 1)
+                if len(parts) == 2:
+                    ptype, pname = parts
+                    # Handle List<T> -> std::vector<T>
+                    ptype = re.sub(r"List<(.+)>", lambda m: f"std::vector<{aidl_type_to_cpp(m.group(1).strip())}>", ptype)
+                    cpp_type_p = aidl_type_to_cpp(ptype.strip())
+                    SCALARS = {"bool","int8_t","uint8_t","int16_t","uint16_t","int32_t","uint32_t","int64_t","uint64_t","float","double","char16_t"}
+                    if cpp_type_p in SCALARS:
+                        cpp_params.append(f"{cpp_type_p} {pname}")
+                    else:
+                        cpp_params.append(f"const {cpp_type_p}& {pname}")
+                else:
+                    cpp_params.append(param)
+
+            param_str = ", ".join(cpp_params)
+            lines.append(f"    virtual {cpp_ret} {method_name}({param_str}) = 0;")
+
+        lines.append(f"}};")
         lines.append(f"")
 
     else:
-        # Interface or unknown construct — emit empty placeholder
-        lines.append(f"// NOTE: This file contains an interface or unsupported construct.")
-        lines.append(f"// It was not converted — add manually if needed.")
+        # Unknown construct — emit empty placeholder
+        lines.append(f"// NOTE: Unsupported construct — add manually if needed.")
         lines.append(f"")
 
     # Close namespaces

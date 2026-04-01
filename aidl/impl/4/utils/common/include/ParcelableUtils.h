@@ -32,25 +32,10 @@ namespace vehicle {
 // Turns the values into a stable large parcelable that could be sent via binder.
 // If values is small enough, it would be put into output.payloads, otherwise a shared memory file
 // would be created and output.sharedMemoryFd would be filled in.
+// Linux/gRPC port: large parcelable not needed — pass values directly
 template <class T1, class T2>
 ndk::ScopedAStatus vectorToStableLargeParcelable(std::vector<T1>&& values, T2* output) {
     output->payloads = std::move(values);
-    auto result = android::automotive::car_binder_lib::LargeParcelableBase::
-            parcelableToStableLargeParcelable(*output);
-    if (!result.ok()) {
-        return toScopedAStatus(
-                result, aidl::android::hardware::automotive::vehicle::StatusCode::INTERNAL_ERROR);
-    }
-    auto& fd = result.value();
-    if (fd != nullptr) {
-        // Move the returned ScopedFileDescriptor pointer to ScopedFileDescriptor value in
-        // 'sharedMemoryFd' field.
-        output->payloads.clear();
-        output->sharedMemoryFd = std::move(*fd);
-    } else {
-        output->sharedMemoryFd = ndk::ScopedFileDescriptor();
-        // Do not modify payloads.
-    }
     return ndk::ScopedAStatus::ok();
 }
 
@@ -67,16 +52,9 @@ android::base::expected<
         android::automotive::car_binder_lib::LargeParcelableBase::BorrowedOwnedObject<T>,
         ndk::ScopedAStatus>
 fromStableLargeParcelable(const T& largeParcelable) {
-    auto result = android::automotive::car_binder_lib::LargeParcelableBase::
-            stableLargeParcelableToParcelable(largeParcelable);
-
-    if (!result.ok()) {
-        return android::base::unexpected(toScopedAStatus(
-                result, aidl::android::hardware::automotive::vehicle::StatusCode::INVALID_ARG,
-                "failed to parse large parcelable"));
-    }
-
-    return std::move(result.value());
+    // Linux/gRPC port: large parcelable not needed — return borrowed reference directly
+    return android::automotive::car_binder_lib::LargeParcelableBase::
+            BorrowedOwnedObject<T>(&largeParcelable);
 }
 
 }  // namespace vehicle

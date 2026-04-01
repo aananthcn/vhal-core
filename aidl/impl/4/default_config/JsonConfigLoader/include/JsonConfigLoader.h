@@ -17,6 +17,7 @@
 #ifndef android_hardware_automotive_vehicle_aidl_impl_default_config_JsonConfigLoader_include_JsonConfigLoader_H_
 #define android_hardware_automotive_vehicle_aidl_impl_default_config_JsonConfigLoader_include_JsonConfigLoader_H_
 
+#include <optional>
 #include <ConfigDeclaration.h>
 #include <VehicleHalTypes.h>
 

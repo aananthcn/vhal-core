@@ -20,5 +20,14 @@ inline bool ParseDouble(const std::string& s, double* out,
     return true;
 }
 
+inline bool ParseFloat(const std::string& s, float* out,
+                       float min = std::numeric_limits<float>::lowest(),
+                       float max = std::numeric_limits<float>::max()) {
+    double d;
+    if (!ParseDouble(s, &d, static_cast<double>(min), static_cast<double>(max))) return false;
+    *out = static_cast<float>(d);
+    return true;
+}
+
 } // namespace base
 } // namespace android

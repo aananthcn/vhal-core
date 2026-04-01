@@ -1,22 +1,18 @@
-// Stub for Linux port — Android ParcelFileDescriptor not available
 #pragma once
 #include <cstdint>
-
-namespace aidl {
-namespace android {
-namespace os {
-
+#include <unistd.h>
+#include <android/binder_auto_utils.h>
+namespace aidl { namespace android { namespace os {
 struct ParcelFileDescriptor {
     int fd{-1};
-
-    bool operator==(const ParcelFileDescriptor& other) const {
-        return fd == other.fd;
+    ParcelFileDescriptor() = default;
+    explicit ParcelFileDescriptor(int f) : fd(f) {}
+    ParcelFileDescriptor& operator=(const ndk::ScopedFileDescriptor& sfd) {
+        fd = sfd.get(); return *this;
     }
-    bool operator!=(const ParcelFileDescriptor& other) const {
-        return !(*this == other);
-    }
+    void set(int f) { fd = f; }
+    int get() const { return fd; }
+    bool operator==(const ParcelFileDescriptor& o) const { return fd == o.fd; }
+    bool operator!=(const ParcelFileDescriptor& o) const { return !(*this == o); }
 };
-
-} // namespace os
-} // namespace android
-} // namespace aidl
+}}}

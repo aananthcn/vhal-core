@@ -27,6 +27,12 @@
 #include <shared_mutex>
 #include <utility>
 
+// grpc++/grpc++.h pulls in <netdb.h> which defines TRY_AGAIN as 2.
+// Undefine it so StatusCode::TRY_AGAIN (an enum class member) compiles.
+#ifdef TRY_AGAIN
+#  undef TRY_AGAIN
+#endif
+
 namespace android::hardware::automotive::vehicle::virtualization {
 
 using ::grpc::ChannelCredentials;

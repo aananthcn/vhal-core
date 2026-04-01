@@ -39,6 +39,13 @@
 #include <dirent.h>
 #include <inttypes.h>
 #include <sys/types.h>
+
+// wakeup_client.grpc.pb.h (included transitively) pulls in grpc++/grpc++.h
+// which includes <netdb.h>, defining TRY_AGAIN as 2.
+// Undefine it so StatusCode::TRY_AGAIN (enum class member) compiles.
+#ifdef TRY_AGAIN
+#  undef TRY_AGAIN
+#endif
 #include <regex>
 #include <unordered_set>
 #include <vector>
@@ -1856,25 +1863,25 @@ std::string FakeVehicleHardware::genFakeDataCommand(const std::vector<std::strin
 
 VehiclePropValue FakeVehicleHardware::createHwInputKeyProp(VehicleHwKeyInputAction action,
                                                            int32_t keyCode, int32_t targetDisplay) {
-    VehiclePropValue value = {
-            .timestamp = elapsedRealtimeNano(),
-            .areaId = 0,
-            .prop = toInt(VehicleProperty::HW_KEY_INPUT),
-            .status = VehiclePropertyStatus::AVAILABLE,
-            .value.int32Values = {toInt(action), keyCode, targetDisplay},
-    };
+    VehiclePropValue value;
+    value.timestamp = elapsedRealtimeNano();
+    value.areaId = 0;
+    value.prop = toInt(VehicleProperty::HW_KEY_INPUT);
+    value.status = VehiclePropertyStatus::AVAILABLE;
+    value.value.int32Values = {toInt(action), keyCode, targetDisplay};
     return value;
 }
 
 VehiclePropValue FakeVehicleHardware::createHwKeyInputV2Prop(int32_t area, int32_t targetDisplay,
                                                              int32_t keyCode, int32_t action,
                                                              int32_t repeatCount) {
-    VehiclePropValue value = {.timestamp = elapsedRealtimeNano(),
-                              .areaId = area,
-                              .prop = toInt(VehicleProperty::HW_KEY_INPUT_V2),
-                              .status = VehiclePropertyStatus::AVAILABLE,
-                              .value.int32Values = {targetDisplay, keyCode, action, repeatCount},
-                              .value.int64Values = {elapsedRealtimeNano()}};
+    VehiclePropValue value;
+    value.timestamp = elapsedRealtimeNano();
+    value.areaId = area;
+    value.prop = toInt(VehicleProperty::HW_KEY_INPUT_V2);
+    value.status = VehiclePropertyStatus::AVAILABLE;
+    value.value.int32Values = {targetDisplay, keyCode, action, repeatCount};
+    value.value.int64Values = {elapsedRealtimeNano()};
     return value;
 }
 
@@ -1909,13 +1916,14 @@ VehiclePropValue FakeVehicleHardware::createHwMotionInputProp(
         floatValues.push_back(size[i]);
     }
 
-    VehiclePropValue value = {.timestamp = elapsedRealtimeNano(),
-                              .areaId = area,
-                              .prop = toInt(VehicleProperty::HW_MOTION_INPUT),
-                              .status = VehiclePropertyStatus::AVAILABLE,
-                              .value.int32Values = intValues,
-                              .value.floatValues = floatValues,
-                              .value.int64Values = {elapsedRealtimeNano()}};
+    VehiclePropValue value;
+    value.timestamp = elapsedRealtimeNano();
+    value.areaId = area;
+    value.prop = toInt(VehicleProperty::HW_MOTION_INPUT);
+    value.status = VehiclePropertyStatus::AVAILABLE;
+    value.value.int32Values = intValues;
+    value.value.floatValues = floatValues;
+    value.value.int64Values = {elapsedRealtimeNano()};
     return value;
 }
 

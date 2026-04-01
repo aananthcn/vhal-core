@@ -30,6 +30,10 @@ inline std::string Join(const std::vector<std::string>& v,
     return result;
 }
 
+inline std::string Join(const std::vector<std::string>& v, char sep) {
+    return Join(v, std::string(1, sep));
+}
+
 inline std::string Trim(const std::string& s) {
     size_t l = s.find_first_not_of(" \t\n\r");
     size_t r = s.find_last_not_of(" \t\n\r");
@@ -39,6 +43,14 @@ inline std::string Trim(const std::string& s) {
 inline bool StartsWith(const std::string& s, const std::string& prefix) {
     return s.size() >= prefix.size() &&
            s.compare(0, prefix.size(), prefix) == 0;
+}
+
+inline bool EqualsIgnoreCase(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return false;
+    }
+    return true;
 }
 
 inline bool EndsWith(const std::string& s, const std::string& suffix) {

@@ -16,41 +16,42 @@
 
 #define LOG_TAG "VehicleService"
 
-#include <DefaultVehicleHal.h>
-#include <FakeVehicleHardware.h>
+// Linux/gRPC port: Binder transport replaced by gRPC.
+// The original VehicleService.cpp registered the HAL with Android's service
+// manager. On Linux we instead expose it via GrpcVehicleProxyServer.
 
-#include <android/binder_manager.h>
-#include <android/binder_process.h>
+#include <FakeVehicleHardware.h>
+#include <GRPCVehicleProxyServer.h>
+
+// grpc++/grpc++.h (via GRPCVehicleProxyServer.h) pulls in <netdb.h> which
+// defines TRY_AGAIN=2. Undefine before using StatusCode enum.
+#ifdef TRY_AGAIN
+#  undef TRY_AGAIN
+#endif
+
 #include <utils/Log.h>
 
-using ::android::hardware::automotive::vehicle::DefaultVehicleHal;
+#include <memory>
+#include <string>
+
 using ::android::hardware::automotive::vehicle::fake::FakeVehicleHardware;
+using ::android::hardware::automotive::vehicle::virtualization::GrpcVehicleProxyServer;
 
-int main(int /* argc */, char* /* argv */[]) {
-    ALOGI("Starting thread pool...");
-    if (!ABinderProcess_setThreadPoolMaxThreadCount(4)) {
-        ALOGE("%s", "failed to set thread pool max thread count");
-        return 1;
-    }
-    ABinderProcess_startThreadPool();
+static constexpr const char* kDefaultAddr = "0.0.0.0:50051";
 
-    std::unique_ptr<FakeVehicleHardware> hardware = std::make_unique<FakeVehicleHardware>();
-    std::shared_ptr<DefaultVehicleHal> vhal =
-            ::ndk::SharedRefBase::make<DefaultVehicleHal>(std::move(hardware));
-
-    ALOGI("Registering as service...");
-    binder_exception_t err = AServiceManager_addService(
-            vhal->asBinder().get(), "android.hardware.automotive.vehicle.IVehicle/default");
-    if (err != EX_NONE) {
-        ALOGE("failed to register android.hardware.automotive.vehicle service, exception: %d", err);
-        return 1;
+int main(int argc, char* argv[]) {
+    std::string addr = kDefaultAddr;
+    if (argc > 1) {
+        addr = argv[1];
     }
 
-    ALOGI("Vehicle Service Ready");
+    ALOGI("Starting vhal-core gRPC server on %s", addr.c_str());
 
-    ABinderProcess_joinThreadPool();
+    auto hardware = std::make_unique<FakeVehicleHardware>();
+    GrpcVehicleProxyServer server(addr, std::move(hardware));
 
-    ALOGI("Vehicle Service Exiting");
+    server.Start().Wait();
 
+    ALOGI("vhal-core gRPC server exiting");
     return 0;
 }

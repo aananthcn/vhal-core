@@ -9,8 +9,15 @@ namespace hardware {
 namespace automotive {
 namespace vehicle {
 
-// Empty stub — gRPC replaces Binder transport
-class BnVehicle {};
+// Binder-native stub — inherits IVehicle so subclasses can use override
+class BnVehicle : public IVehicle {
+public:
+    virtual binder_status_t dump(int, const char**, uint32_t) { return STATUS_OK; }
+    virtual binder_status_t getInterfaceVersion(int32_t* version) {
+        if (version) *version = 4;
+        return STATUS_OK;
+    }
+};
 
 } // namespace vehicle
 } // namespace automotive

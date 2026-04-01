@@ -249,6 +249,8 @@ class VhalError final {
 
     // Aananth: Added for Linux port — matches android::base::Error<E> message() contract
     std::string message() const { return print(); }
+    // code() — returns underlying StatusCode (matches ErrorMessage::code() pattern)
+    aidl::android::hardware::automotive::vehicle::StatusCode code() const { return value(); }
 
   private:
     aidl::android::hardware::automotive::vehicle::StatusCode mCode;

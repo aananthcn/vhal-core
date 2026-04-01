@@ -1271,12 +1271,13 @@ void DefaultVehicleHal::checkHealth(IVehicleHardware* vehicleHardware,
         ALOGE("VHAL check health returns non-okay status");
         return;
     }
-    std::vector<VehiclePropValue> values = {{
-            .areaId = 0,
-            .prop = toInt(VehicleProperty::VHAL_HEARTBEAT),
-            .status = VehiclePropertyStatus::AVAILABLE,
-            .value.int64Values = {uptimeMillis()},
-    }};
+    // Linux port: C++ doesn't support nested designated initializers (.value.int64Values)
+    VehiclePropValue heartbeat;
+    heartbeat.areaId = 0;
+    heartbeat.prop = toInt(VehicleProperty::VHAL_HEARTBEAT);
+    heartbeat.status = VehiclePropertyStatus::AVAILABLE;
+    heartbeat.value.int64Values = {uptimeMillis()};
+    std::vector<VehiclePropValue> values = {heartbeat};
     onPropertyChangeEvent(subscriptionManager, std::move(values));
     return;
 }

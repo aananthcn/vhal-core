@@ -395,6 +395,10 @@ VehiclePropValuePool::RecyclableType toVehiclePropValue(
     return propValue;
 }
 
+// Explicit instantiations for types used from other translation units (FakeUserHal.cpp)
+template Result<aidl::android::hardware::automotive::vehicle::SwitchUserMessageType>
+        verifyAndCast<aidl::android::hardware::automotive::vehicle::SwitchUserMessageType>(int32_t);
+
 }  // namespace user_hal_helper
 }  // namespace fake
 }  // namespace vehicle
