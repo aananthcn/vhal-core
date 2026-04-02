@@ -82,6 +82,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
 ::grpc::Status GrpcVehicleProxyServer::GetAllPropertyConfig(
         ::grpc::ServerContext* context, const ::google::protobuf::Empty* request,
         ::grpc::ServerWriter<proto::VehiclePropConfig>* stream) {
+    LOG(INFO) << __func__ << ": Client connected from " << context->peer();
     for (const auto& config : mHardware->getAllPropertyConfigs()) {
         proto::VehiclePropConfig protoConfig;
         proto_msg_converter::aidlToProto(config, &protoConfig);
@@ -95,6 +96,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
 ::grpc::Status GrpcVehicleProxyServer::SetValues(::grpc::ServerContext* context,
                                                  const proto::VehiclePropValueRequests* requests,
                                                  proto::SetValueResults* results) {
+    LOG(INFO) << __func__ << ": Client connected from " << context->peer();
     std::vector<aidlvhal::SetValueRequest> aidlRequests;
     std::unordered_set<int64_t> requestIds;
     for (const auto& protoRequest : requests->requests()) {
@@ -151,6 +153,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
 ::grpc::Status GrpcVehicleProxyServer::GetValues(::grpc::ServerContext* context,
                                                  const proto::VehiclePropValueRequests* requests,
                                                  proto::GetValueResults* results) {
+    LOG(INFO) << __func__ << ": Client connected from " << context->peer();
     std::vector<aidlvhal::GetValueRequest> aidlRequests;
     std::unordered_set<int64_t> requestIds;
     for (const auto& protoRequest : requests->requests()) {
@@ -241,6 +244,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
 ::grpc::Status GrpcVehicleProxyServer::CheckHealth(::grpc::ServerContext* context,
                                                    const ::google::protobuf::Empty*,
                                                    proto::VehicleHalCallStatus* status) {
+    LOG(INFO) << __func__ << ": Client connected from " << context->peer();
     status->set_status_code(static_cast<proto::StatusCode>(mHardware->checkHealth()));
     return ::grpc::Status::OK;
 }
@@ -260,6 +264,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
 ::grpc::Status GrpcVehicleProxyServer::StartPropertyValuesStream(
         ::grpc::ServerContext* context, const ::google::protobuf::Empty* request,
         ::grpc::ServerWriter<proto::VehiclePropValues>* stream) {
+    LOG(INFO) << __func__ << ": Client connected from " << context->peer();
     auto conn = std::make_shared<ConnectionDescriptor<proto::VehiclePropValues>>(stream);
     {
         std::lock_guard lck(mConnectionMutex);
