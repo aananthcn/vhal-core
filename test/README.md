@@ -59,7 +59,7 @@ python3 -m grpc_tools.protoc \
 
 Wait until you see:
 ```
-INFO/vhal: Wait: gRPC server is active and waiting for connections
+INFO/vhal: Wait: gRPC server is ready to serve its clients!
 ```
 
 **2. Run the test client** (in a separate terminal, from `test/vhal/`):

@@ -49,7 +49,7 @@ Expected startup output:
 I/VehicleService: Starting vhal-core gRPC server on 0.0.0.0:50051
 I/FakeVehicleHardware: loading properties from .../etc/vhal/vhalconfig/
 I/FakeVehicleHardware: loading properties from .../etc/vhal/vhalconfig/DefaultProperties.json
-INFO/vhal: Wait: gRPC server is active and waiting for connections
+INFO/vhal: Wait: gRPC server is ready to serve its clients!
 ```
 
 The server listens on `0.0.0.0:50051` by default.
