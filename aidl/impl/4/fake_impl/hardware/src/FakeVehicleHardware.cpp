@@ -1409,8 +1409,9 @@ SetValueResult FakeVehicleHardware::handleSetValueRequest(const SetValueRequest&
     setValueResult.requestId = request.requestId;
 
     if (auto result = setValue(request.value); !result.ok()) {
-        ALOGE("failed to set value, error: %s, code: %d", getErrorMsg(result).c_str(),
-              getIntErrorCode(result));
+        ALOGE("failed to set value, prop: %#x, areaId: %d, error: %s, code: %d",
+              request.value.prop, request.value.areaId,
+              getErrorMsg(result).c_str(), getIntErrorCode(result));
         setValueResult.status = getErrorCode(result);
     } else {
         setValueResult.status = StatusCode::OK;
@@ -1442,8 +1443,9 @@ GetValueResult FakeVehicleHardware::handleGetValueRequest(const GetValueRequest&
 
     auto result = getValue(request.prop);
     if (!result.ok()) {
-        ALOGE("failed to get value, error: %s, code: %d", getErrorMsg(result).c_str(),
-              getIntErrorCode(result));
+        ALOGE("failed to get value, prop: %#x, areaId: %d, error: %s, code: %d",
+              request.prop.prop, request.prop.areaId,
+              getErrorMsg(result).c_str(), getIntErrorCode(result));
         getValueResult.status = getErrorCode(result);
     } else {
         getValueResult.status = StatusCode::OK;

@@ -4,6 +4,7 @@
 Port Android 16 Vehicle HAL (VHAL) to run on Linux (Raspberry Pi OS) and QNX,
 replacing Android's Binder/AIDL IPC transport with gRPC.
 ClusterUI will derive vehicle property data from VHAL running on non-Android OS.
+Any other apps or services must be able to inject / change these vehicle properties.
 
 ## Architecture
 - Transport: gRPC replaces Binder (GRPCVehicleProxyServer is the entry point)

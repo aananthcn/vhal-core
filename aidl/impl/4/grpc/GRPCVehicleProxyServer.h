@@ -30,8 +30,10 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <shared_mutex>
 #include <string>
+#include <thread>
 #include <utility>
 
 namespace android::hardware::automotive::vehicle::virtualization {
@@ -149,6 +151,20 @@ class GrpcVehicleProxyServer : public proto::VehicleServer::Service {
     template <typename ValueType>
     void writeToStream(std::vector<std::shared_ptr<ConnectionDescriptor<ValueType>>>& connections,
                        const ValueType& protoValues);
+
+    // Async event-writer: OnVehiclePropChange / OnSupportedValuesChange enqueue
+    // events here and return immediately.  A dedicated thread drains the queues
+    // and performs the blocking gRPC stream writes, so the SetValues /
+    // RecurrentTimer paths are never delayed by stream I/O.
+    std::mutex              mEventQueueMutex;
+    std::condition_variable mEventQueueCV;
+    bool                    mStopEventWriter{false};
+
+    std::queue<proto::VehiclePropValues>     mPropValueQueue;
+    std::queue<proto::SupportedValuesChange> mSupportedValuesChangeQueue;
+
+    std::thread mEventWriterThread;
+    void        eventWriterLoop();
 
     static constexpr auto kHardwareOpTimeout = std::chrono::seconds(1);
 };

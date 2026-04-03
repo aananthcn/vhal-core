@@ -77,6 +77,7 @@ GrpcVehicleProxyServer::GrpcVehicleProxyServer(std::vector<std::string> serverAd
                     [this](std::vector<PropIdAreaId> propIdAreaIds) {
                         OnSupportedValuesChange(propIdAreaIds);
                     }));
+    mEventWriterThread = std::thread(&GrpcVehicleProxyServer::eventWriterLoop, this);
 }
 
 ::grpc::Status GrpcVehicleProxyServer::GetAllPropertyConfig(
@@ -312,20 +313,58 @@ void GrpcVehicleProxyServer::OnVehiclePropChange(
         const std::vector<aidlvhal::VehiclePropValue>& values) {
     proto::VehiclePropValues protoValues;
     for (const auto& value : values) {
-        auto* protoValuePtr = protoValues.add_values();
-        proto_msg_converter::aidlToProto(value, protoValuePtr);
+        proto_msg_converter::aidlToProto(value, protoValues.add_values());
     }
-    writeToStream(mValueStreamingConnections, protoValues);
+    {
+        std::lock_guard lck(mEventQueueMutex);
+        mPropValueQueue.push(std::move(protoValues));
+    }
+    mEventQueueCV.notify_one();
 }
 
 void GrpcVehicleProxyServer::OnSupportedValuesChange(
         const std::vector<PropIdAreaId>& propIdAreaIds) {
-    proto::SupportedValuesChange protoValues;
+    proto::SupportedValuesChange protoChange;
     for (const auto& propIdAreaId : propIdAreaIds) {
-        auto* protoValuePtr = protoValues.add_prop_id_area_ids();
-        proto_msg_converter::aidlToProto(propIdAreaId, protoValuePtr);
+        proto_msg_converter::aidlToProto(propIdAreaId, protoChange.add_prop_id_area_ids());
     }
-    writeToStream(mSupportedValuesChangeConnections, protoValues);
+    {
+        std::lock_guard lck(mEventQueueMutex);
+        mSupportedValuesChangeQueue.push(std::move(protoChange));
+    }
+    mEventQueueCV.notify_one();
+}
+
+void GrpcVehicleProxyServer::eventWriterLoop() {
+    while (true) {
+        std::unique_lock lck(mEventQueueMutex);
+        mEventQueueCV.wait(lck, [this] {
+            return mStopEventWriter ||
+                   !mPropValueQueue.empty() ||
+                   !mSupportedValuesChangeQueue.empty();
+        });
+
+        // Drain both queues while holding the lock (swap-out pattern).
+        std::queue<proto::VehiclePropValues>     propBatch;
+        std::queue<proto::SupportedValuesChange> changeBatch;
+        propBatch.swap(mPropValueQueue);
+        changeBatch.swap(mSupportedValuesChangeQueue);
+        bool stop = mStopEventWriter;
+        lck.unlock();
+
+        // Perform the blocking stream writes outside the queue lock so that
+        // OnVehiclePropChange / OnSupportedValuesChange are never delayed.
+        while (!propBatch.empty()) {
+            writeToStream(mValueStreamingConnections, propBatch.front());
+            propBatch.pop();
+        }
+        while (!changeBatch.empty()) {
+            writeToStream(mSupportedValuesChangeConnections, changeBatch.front());
+            changeBatch.pop();
+        }
+
+        if (stop) break;
+    }
 }
 
 template <typename ValueType>
@@ -373,6 +412,17 @@ GrpcVehicleProxyServer& GrpcVehicleProxyServer::Start() {
 
 GrpcVehicleProxyServer& GrpcVehicleProxyServer::Shutdown() {
     LOG(INFO) << __func__ << ": Start shutting down GrpcVehicleProxyServer";
+
+    // Stop the async event-writer thread before closing stream connections.
+    {
+        std::lock_guard lck(mEventQueueMutex);
+        mStopEventWriter = true;
+    }
+    mEventQueueCV.notify_one();
+    if (mEventWriterThread.joinable()) {
+        mEventWriterThread.join();
+    }
+
     std::shared_lock read_lock(mConnectionMutex);
     LOG(INFO) << __func__ << ": Waiting for value stream connection to shutdown";
     for (auto& conn : mValueStreamingConnections) {
