@@ -15,7 +15,7 @@ ENGINE_RPM              = 0x11600305  # float  RPM
 FUEL_LEVEL              = 0x11600307  # float  ml
 ENGINE_COOLANT_TEMP     = 0x11600301  # float  °C
 GEAR_SELECTION          = 0x11400400  # int32  VehicleGear
-TURN_SIGNAL_LIGHT_STATE = 0x11400410  # int32  VehicleTurnSignal (replaces deprecated TURN_SIGNAL_STATE)
+PARKING_BRAKE_ON        = 0x11200402  # int32  Boolean (False == dis-engaged)
 
 PROP_NAMES = {
     PERF_VEHICLE_SPEED:      "PERF_VEHICLE_SPEED",
@@ -23,7 +23,7 @@ PROP_NAMES = {
     FUEL_LEVEL:              "FUEL_LEVEL",
     ENGINE_COOLANT_TEMP:     "ENGINE_COOLANT_TEMP",
     GEAR_SELECTION:          "GEAR_SELECTION",
-    TURN_SIGNAL_LIGHT_STATE: "TURN_SIGNAL_LIGHT_STATE",
+    PARKING_BRAKE_ON:        "PARKING_BRAKE_ON",
 }
 
 ALL_PROPS = [
@@ -32,7 +32,7 @@ ALL_PROPS = [
     FUEL_LEVEL,
     ENGINE_COOLANT_TEMP,
     GEAR_SELECTION,
-    TURN_SIGNAL_LIGHT_STATE,
+    PARKING_BRAKE_ON,
 ]
 
 # ── VehicleGear constants ─────────────────────────────────────────────────────
@@ -41,9 +41,6 @@ GEAR = {
     "1": 0x10, "2": 0x20, "3": 0x40, "4": 0x80, "5": 0x100,
     "6": 0x200, "7": 0x400, "8": 0x800, "9": 0x1000,
 }
-
-# ── VehicleTurnSignal constants ───────────────────────────────────────────────
-TURN = {"none": 0, "right": 1, "left": 2}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -63,9 +60,8 @@ def fmt_value(prop_id, val):
         if prop_id == GEAR_SELECTION:
             name = {v: k for k, v in GEAR.items()}.get(v)
             return f"{name} ({v:#x})" if name else hex(v)
-        if prop_id == TURN_SIGNAL_LIGHT_STATE:
-            name = {v: k for k, v in TURN.items()}.get(v)
-            return name if name else str(v)
+        if prop_id == PARKING_BRAKE_ON:
+            return "on" if v else "off"
         return str(v)
     return "<empty>"
 
@@ -125,16 +121,13 @@ def parse_gear(s):
         )
 
 
-def parse_turn(s):
+def parse_brake(s):
     sl = s.lower()
-    if sl in TURN:
-        return TURN[sl]
-    try:
-        return int(s, 0)
-    except ValueError:
-        raise argparse.ArgumentTypeError(
-            f"Invalid turn signal '{s}'. Use: {', '.join(TURN)} or a raw integer."
-        )
+    if sl in ("on", "1", "true"):
+        return 1
+    if sl in ("off", "0", "false"):
+        return 0
+    raise argparse.ArgumentTypeError(f"Invalid park-brake value '{s}'. Use: on|off")
 
 
 def main():
@@ -142,12 +135,12 @@ def main():
     parser.add_argument("--server", default=SERVER_ADDR)
     parser.add_argument("--speed",       type=float,      metavar="M/S")
     parser.add_argument("--rpm",         type=float,      metavar="RPM")
-    parser.add_argument("--fuel",        type=float,      metavar="LITRES")
+    parser.add_argument("--fuel",        type=float,      metavar="MilliLITRES")
     parser.add_argument("--temp",        type=float,      metavar="DEG_C")
     parser.add_argument("--gear",        type=parse_gear, metavar="GEAR",
                         help="park|reverse|neutral|drive|1-9 or raw int")
-    parser.add_argument("--turn-signal", type=parse_turn, metavar="SIGNAL",
-                        help="none|right|left or raw int")
+    parser.add_argument("--park-brake",  type=parse_brake, metavar="SIGNAL",
+                        help="on|off")
     args = parser.parse_args()
 
     with grpc.insecure_channel(args.server) as channel:
@@ -181,7 +174,7 @@ def main():
         if args.fuel        is not None: inject.append(float_req(FUEL_LEVEL,          args.fuel))
         if args.temp        is not None: inject.append(float_req(ENGINE_COOLANT_TEMP, args.temp))
         if args.gear        is not None: inject.append(int32_req(GEAR_SELECTION,      args.gear))
-        if args.turn_signal is not None: inject.append(int32_req(TURN_SIGNAL_LIGHT_STATE, args.turn_signal))
+        if args.park_brake  is not None: inject.append(int32_req(PARKING_BRAKE_ON, args.park_brake))
 
         if not inject:
             return
