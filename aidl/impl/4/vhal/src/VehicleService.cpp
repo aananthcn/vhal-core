@@ -20,14 +20,12 @@
 // The original VehicleService.cpp registered the HAL with Android's service
 // manager. On Linux we instead expose it via GrpcVehicleProxyServer.
 
-#include <FakeVehicleHardware.h>
+// GRPCVehicleProxyServer.h must come first: it pulls in VehicleServer.grpc.pb.h
+// which includes StatusCode.pb.h before any grpc networking header gets a chance
+// to #define TRY_AGAIN (a Linux netdb.h macro). FakeVehicleHardware.h also
+// includes grpc++, but by then StatusCode.pb.h is already processed and guarded.
 #include <GRPCVehicleProxyServer.h>
-
-// grpc++/grpc++.h (via GRPCVehicleProxyServer.h) pulls in <netdb.h> which
-// defines TRY_AGAIN=2. Undefine before using StatusCode enum.
-#ifdef TRY_AGAIN
-#  undef TRY_AGAIN
-#endif
+#include <FakeVehicleHardware.h>
 
 #include <utils/Log.h>
 
