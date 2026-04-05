@@ -45,16 +45,18 @@ The implementation version is **V4**, corresponding to Android 16.
 │  libVehicleHalProtos       │    │  Drop-in replacement for      │
 │  libVehicleServerProtoStub │    │  vhal-ipc-grpc                │
 │  GRPCVehicleProxyServer    │    └───────────────────────────────┘
-└─────────────┬──────────────┘
-              │ depends on
-┌─────────────▼──────────────┐
-│  vhal-server               │
-│  (runnable process)        │
-│                            │
-│  FakeVehicleHardware       │
-│  DefaultProperties.json    │
-│  main() / VehicleService   │
-└────────────────────────────┘
+│  GRPCVehicleHardware       │
+└──────┬──────────┬──────────┘
+       │          │ depends on
+       │   ┌──────▼──────────────┐    ┌──────────────────────────────┐
+       │   │  vhal-server        │    │  vhal-gateway                │
+       │   │  (server process)   │    │  (forwarding daemon)         │
+       │   │                     │    │                              │
+       │   │  FakeVehicleHardware│    │  GatewayConfig (JSON loader) │
+       │   │  DefaultProperties  │    │  VhalGateway (orchestrator)  │
+       │   │  main()/VehicleServ.│    │  NodeForwarder × N           │
+       │   └─────────────────────┘    │  (one thread per remote node)│
+       └──────────────────────────────┴──────────────────────────────┘
 ```
 
 **Client dependency (ClusterUI, etc.):**
@@ -76,6 +78,7 @@ When SOME/IP is adopted:
 | vhal-types | None — property IDs, value types, IVehicleHardware unchanged |
 | vhal-ipc-grpc | Replaced entirely by vhal-ipc-someip |
 | vhal-server | Relink against vhal-ipc-someip; no domain logic changes |
+| vhal-gateway | Swap GRPCVehicleHardware for SomeIPVehicleHardware; NodeForwarder uses SOME/IP SetValues |
 | ClusterUI | Swap VhalGrpcClient for VhalSomeIPClient; property access code unchanged |
 
 ---
@@ -88,27 +91,36 @@ When SOME/IP is adopted:
 │  VhalGrpcClient                         │
 │    └── VehicleServer::Stub              │  ← from vhal-ipc-grpc
 └───────────────────┬─────────────────────┘
-                    │ gRPC over TCP (default: 0.0.0.0:50051)
-                    │ or Unix Domain Socket
-                    │ wire contract: VehicleServer.proto
-┌───────────────────▼─────────────────────┐
-│         vhal-core server process        │
-│                                         │
-│  GRPCVehicleProxyServer                 │  ← vhal-ipc-grpc
-│    └── implements VehicleServer::Service│
-│          │                              │
-│          ▼                              │
-│  IVehicleHardware (abstract)            │  ← vhal-types
-│    └── FakeVehicleHardware (default)    │  ← vhal-server
-│          └── VehiclePropertyStore       │  ← vhal-types
-│          └── DefaultProperties.json     │
-│          └── GeneratorHub (sim values)  │
-└─────────────────────────────────────────┘
+                    │ gRPC (GetValues / SetValues / StartPropertyValuesStream)
+                    │
+┌───────────────────▼─────────────────────┐    ┌────────────────────────────────────┐
+│         vhal-core server (Node A)       │    │  vhal-gateway process (Node A)     │
+│                                         │◄───┤                                    │
+│  GRPCVehicleProxyServer                 │    │  VhalGateway                       │
+│    └── VehicleServer::Service           │    │    └── GRPCVehicleHardware         │
+│          │                              │    │         (StartPropertyValuesStream) │
+│          ▼                              │    │                                    │
+│  IVehicleHardware (abstract)            │    │  NodeForwarder × N                 │
+│    └── FakeVehicleHardware              │    │  (one thread per remote node)      │
+│          └── VehiclePropertyStore       │    └────────────┬───────────────────────┘
+│          └── DefaultProperties.json     │                 │ SetValues (on change)
+│          └── GeneratorHub (sim values)  │                 │
+└─────────────────────────────────────────┘                 │
+                                                            ▼
+                                               ┌────────────────────────────────────┐
+                                               │  vhal-core server (Node B, C, ...) │
+                                               │  (remote nodes per gateway-configs) │
+                                               └────────────────────────────────────┘
 ```
 
 Connection lifecycle logging (in GRPCVehicleProxyServer):
 - "Client connected from X" — logged once on first RPC from a new peer address
 - "Client disconnected from X" — logged when a streaming connection from that peer closes
+
+vhal-gateway threading model:
+- GRPCVehicleHardware runs a `ValuePollingLoop` thread (StartPropertyValuesStream)
+- Each NodeForwarder has one worker thread — queues changed values and calls remote SetValues
+- The callback thread (ValuePollingLoop) never blocks: forward() enqueues and returns immediately
 
 ---
 
@@ -164,7 +176,9 @@ vhal-core/
 
 | Decision | Detail |
 | :--- | :--- |
-| Three-package split | vhal-types / vhal-ipc-grpc / vhal-server — see Package Split above |
+| Four-package split | vhal-types / vhal-ipc-grpc / vhal-server / vhal-gateway — see Package Split above |
+| vhal-gateway threading | One NodeForwarder thread per remote node; callback thread never blocked by remote I/O |
+| vhal-gateway config | gateway-configs.json: version + array of { ipaddr, propertyIds[] }; source in etc/vhal/ |
 | Transport abstraction | IVehicleHardware decouples backend from transport |
 | Current transport | gRPC replaces Binder; GRPCVehicleProxyServer is the server adapter |
 | Planned transport | SOME/IP (vsomeip); entire vhal-ipc-grpc replaced, nothing else changes |

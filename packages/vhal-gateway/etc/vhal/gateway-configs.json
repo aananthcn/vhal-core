@@ -1,0 +1,17 @@
+{
+    "version": "1.0",
+    "gatewayNodes": [
+        {
+            "ipaddr": "localhost:50052",
+            "messages": [
+                {
+                    "msgId": "ivi-basic",
+                    "properties": [
+                        {"id": "0x11400400", "desc": "GEAR_SELECTION"},
+                        {"id": "0x11600207", "desc": "PERF_VEHICLE_SPEED"}
+                    ]
+                }
+            ]
+        }
+    ]
+}

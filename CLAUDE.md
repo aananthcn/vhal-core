@@ -6,8 +6,8 @@ replacing Android's Binder/AIDL IPC transport with gRPC (current) and SOME/IP (p
 ClusterUI and other apps derive vehicle property data from VHAL running on non-Android OS.
 Any app or service must be able to read or inject vehicle properties via the IPC transport.
 
-## Planned Package Split
-The codebase is being restructured into three independently distributable Conan packages:
+## Package Structure
+Four independently distributable Conan packages:
 
 1. **vhal-types** — transport-agnostic domain layer
    - AIDL-generated C++ headers (VehicleProperty.h, VehicleGear.h, etc.)
@@ -18,7 +18,7 @@ The codebase is being restructured into three independently distributable Conan 
 2. **vhal-ipc-grpc** — gRPC transport layer (current, replaceable)
    - Protobuf message definitions and generated stubs
    - VehicleServer.proto (service contract)
-   - GRPCVehicleProxyServer (server-side adapter)
+   - GRPCVehicleProxyServer (server-side adapter) + GRPCVehicleHardware (client adapter)
    - Intended to be swapped for vhal-ipc-someip when SOME/IP is adopted
 
 3. **vhal-server** — runnable server process
@@ -26,6 +26,16 @@ The codebase is being restructured into three independently distributable Conan 
    - DefaultProperties.json config loading
    - main() entry point
    - Depends on vhal-types + one vhal-ipc-* package
+
+4. **vhal-gateway** — property forwarding daemon
+   - Subscribes to local vhal-core via GRPCVehicleHardware (StartPropertyValuesStream)
+   - On property change, forwards matching values to configured remote nodes via SetValues
+   - Config: packages/vhal-gateway/etc/vhal/gateway-configs.json (source truth)
+   - Runtime config root: /opt/car-ui/etc/vhal (override via -DGATEWAY_CONFIG_ROOT=...)
+   - One worker thread spawned per remote node; callback thread never blocked
+   - Config JSON: { version, gatewayNodes: [ { ipaddr, messages: [ { msgId, properties: [ { id, desc } ] } ] } ] }
+   - Property id is a hex string (e.g. "0x11400400"); desc is informational only
+   - Each message group is forwarded in its own SetValues call; groups with no changed props are skipped
 
 Clients (ClusterUI etc.) depend only on vhal-types + vhal-ipc-grpc (for the generated
 client stub VehicleServer::Stub). They have no compile-time dependency on vhal-server.
@@ -55,5 +65,7 @@ cmake -B build/Release -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmak
 cmake --build build/Release -j$(nproc)
 
 ## Current Status
+Four-package split implemented: vhal-types, vhal-ipc-grpc, vhal-server, vhal-gateway.
 Core server builds and runs. gRPC connection tracking (new peer / disconnect) implemented.
-Next: restructure CMakeLists.txt and add conanfile.py exports for the three-package split.
+vhal-gateway reads gateway-configs.json, connects to local vhal-core, and forwards
+on-change property values to configured remote nodes over gRPC SetValues.

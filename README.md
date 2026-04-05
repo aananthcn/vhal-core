@@ -34,14 +34,17 @@ cmake -B build/Release \
 cmake --build build/Release -j$(nproc)
 ```
 
-The binary is produced at `build/Release/vhal-core`.
+Binaries produced:
+- `build/Release/packages/vhal-server/vhal-core` — VHAL server
+- `build/Release/packages/vhal-gateway/vhal-gateway` — property forwarding daemon
 
 ---
 
-## Run
+## Run VHAL Server
 
 ```bash
-./build/Release/vhal-core
+./build/Release/packages/vhal-server/vhal-core 
+./build/Release/packages/vhal-server/vhal-core 0.0.0.0:50052
 ```
 
 Expected startup output:
@@ -53,6 +56,48 @@ INFO/vhal: Wait: gRPC server is ready to serve its clients!
 ```
 
 The server listens on `0.0.0.0:50051` by default.
+
+---
+
+## Run VHAL Gateway
+
+```bash
+# Uses default config: packages/vhal-gateway/etc/vhal/gateway-configs.json
+./build/Release/packages/vhal-gateway/vhal-gateway
+
+# Custom local VHAL address and config file
+./build/Release/packages/vhal-gateway/vhal-gateway localhost:50051 /path/to/gateway-configs.json
+```
+
+The gateway connects to the local vhal-core, subscribes to all property change events,
+and forwards matching properties to each configured remote node on change.
+
+Config file format (`packages/vhal-gateway/etc/vhal/gateway-configs.json`):
+```json
+{
+    "version": "1.0",
+    "gatewayNodes": [
+        {
+            "ipaddr": "192.168.1.20:50051",
+            "messages": [
+                {
+                    "msgId": "ivi-basic",
+                    "properties": [
+                        {"id": "0x11400400", "desc": "GEAR_SELECTION"},
+                        {"id": "0x11600207", "desc": "PERF_VEHICLE_SPEED"}
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
+Each `messages` entry is a named group of properties. Property IDs are hex strings matching
+the VHAL property enum values. When any property in a group changes, that group's changed
+values are sent as a single `SetValues` call. Groups with no changed properties are not sent.
+
+On final integration, deploy config to `/opt/car-ui/etc/vhal/gateway-configs.json`
+(the default `GATEWAY_CONFIG_ROOT` for production builds).
 
 ---
 
