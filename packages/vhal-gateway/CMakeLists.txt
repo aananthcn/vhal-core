@@ -64,6 +64,7 @@ target_compile_definitions(vhal-gateway PRIVATE
 target_compile_options(vhal-gateway PRIVATE -Wno-unused-parameter)
 
 install(TARGETS vhal-gateway RUNTIME DESTINATION bin)
+install(TARGETS VhalGatewayLib ARCHIVE DESTINATION lib)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/etc/
     DESTINATION etc
 )
