@@ -143,11 +143,16 @@ def main():
                         help="on|off")
     args = parser.parse_args()
 
-    with grpc.insecure_channel(args.server) as channel:
+    # Append default port if the caller passed only a bare hostname/IP.
+    server = args.server
+    if ":" not in server.lstrip("["):  # skip IPv6 brackets
+        server = f"{server}:50051"
+
+    with grpc.insecure_channel(server) as channel:
         try:
             grpc.channel_ready_future(channel).result(timeout=5)
         except grpc.FutureTimeoutError:
-            print(f"ERROR: Timed out connecting to {args.server}")
+            print(f"ERROR: Timed out connecting to {server}")
             sys.exit(1)
 
         stub = VehicleServer_pb2_grpc.VehicleServerStub(channel)
