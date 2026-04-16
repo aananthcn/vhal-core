@@ -1,0 +1,26 @@
+# vhal-grpc-service.rc
+#
+# Android init configuration for the gRPC-backed Vehicle HAL service.
+#
+# This service replaces android.hardware.automotive.vehicle@V4-default-service.
+# Disable the default service in device.mk and enable this one instead.
+#
+# The server address (vhal-core on the Instrument Cluster Linux node) can be
+# overridden at runtime via the system property vendor.vhal.grpc.server,
+# or hardcoded here as a command-line argument to the binary.
+
+service vhal-grpc /vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service
+    # Pass the vhal-core server address as a command-line argument.
+    # Change this if the Instrument Cluster IP or port differs.
+    # If omitted, falls back to system property vendor.vhal.grpc.server,
+    # then to the compiled-in default (192.168.10.10:50051).
+    #
+    # Uncomment and adjust to override:
+    # class hal 192.168.10.10:50051
+
+    class hal
+    user vehicle_network
+    # inet: required for outbound TCP connections to the gRPC server.
+    group vehicle_network inet
+    ioprio be 4
+    onrestart restart vhal-grpc

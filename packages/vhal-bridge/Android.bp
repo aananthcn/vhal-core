@@ -1,0 +1,69 @@
+// Copyright (C) 2025 Aananth C N
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// vhal-bridge — Android VHAL service backed by the remote vhal-core gRPC server.
+//
+// This is the ONLY Android-targeted build artifact in vhal-core.
+// The Linux side (vhal-server, vhal-gateway) is built by CMake + Conan.
+//
+// Replaces android.hardware.automotive.vehicle@V4-default-service in device.mk:
+//   PRODUCT_PACKAGES -= android.hardware.automotive.vehicle@V4-default-service
+//   PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "android.hardware.automotive.vehicle@V4-grpc-service",
+    vendor: true,
+    defaults: [
+        "VehicleHalDefaults",
+    ],
+    vintf_fragments: ["vhal-grpc-service.xml"],
+    init_rc: ["vhal-grpc-service.rc"],
+
+    // Installs to /vendor/bin/hw/ — the conventional location for HAL binaries.
+    relative_install_path: "hw",
+
+    srcs: ["main.cpp"],
+
+    static_libs: [
+        // AIDL VHAL framework: registers the IVehicle/default AIDL service and
+        // dispatches binder calls to the IVehicleHardware backend.
+        "DefaultVehicleHal",
+
+        // gRPC client backend: translates IVehicleHardware calls to gRPC RPCs
+        // directed at the remote vhal-core server.
+        "android.hardware.automotive.vehicle@default-grpc-hardware-lib",
+
+        // Vehicle HAL utilities (VehiclePropertyStore, RecurrentTimer, …).
+        "VehicleHalUtils",
+    ],
+
+    header_libs: [
+        "IVehicleHardware",
+    ],
+
+    shared_libs: [
+        "libbinder_ndk",
+        "libgrpc++",
+        "libprotobuf-cpp-full",
+        "liblog",
+    ],
+
+    cflags: [
+        "-Wno-unused-parameter",
+    ],
+}

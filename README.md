@@ -7,19 +7,37 @@ For architecture details, design decisions, and folder structure see [ARCHITECTU
 
 ---
 
-## Prerequisites
+## Getting Started
+
+vhal-core targets **two independent build pipelines** from the same repo:
+
+| Pipeline | Target | Build system | Produces |
+|---|---|---|---|
+| Linux | Instrument Cluster (RPi OS, QNX) | CMake + Conan | `vhal-core` server + `vhal-gateway` daemon |
+| Android | Head Unit / AAOS (RPi5) | Soong (Android.bp) | `android.hardware.automotive.vehicle@V4-grpc-service` |
+
+---
+
+### Getting Started — Linux (Instrument Cluster)
+
+#### Prerequisites
 
 ```bash
 sudo apt install build-essential cmake python3-pip
 pip3 install conan
 ```
 
----
-
-## Build
+#### Clone
 
 ```bash
-# Detect the host build profile (run once)
+git clone https://github.com/aananthcn/vhal-core.git ~/path/to/vhal-core
+cd ~/path/to/vhal-core
+```
+
+#### Build
+
+```bash
+# Detect the host build profile (run once per machine)
 conan profile detect
 
 # Install dependencies
@@ -35,12 +53,103 @@ cmake --build build/Release -j$(nproc)
 ```
 
 Binaries produced:
-- `build/Release/packages/vhal-server/vhal-core` — VHAL server
+- `build/Release/packages/vhal-server/vhal-core` — VHAL gRPC server
 - `build/Release/packages/vhal-gateway/vhal-gateway` — property forwarding daemon
 
 ---
 
-## Run VHAL Server
+### Getting Started — Android (AAOS Head Unit)
+
+vhal-bridge is the Android VHAL service built from this repo. It replaces the
+default `FakeVehicleHardware`-backed VHAL with one that connects to the Linux
+vhal-core gRPC server over Ethernet.
+
+#### Step 1 — Place the repo in the AOSP vendor tree
+
+Clone vhal-core directly into the Android source tree:
+
+```bash
+cd <AOSP_ROOT>
+git clone https://github.com/aananthcn/vhal-core.git vendor/brcm/vhal-core
+```
+
+Or add it to your `repo` manifest so it is fetched automatically on `repo sync`:
+
+```xml
+<!-- In your device manifest (e.g. .repo/manifests/default.xml) -->
+<project name="vhal-core"
+         path="vendor/brcm/vhal-core"
+         remote="<your-remote>"
+         revision="main" />
+```
+
+#### Step 2 — Activate vhal-bridge in the device build
+
+In your device's `device.mk`, swap out the default VHAL for the gRPC-backed one:
+
+```makefile
+# Remove the default fake VHAL
+PRODUCT_PACKAGES -= android.hardware.automotive.vehicle@V4-default-service
+
+# Add the gRPC bridge VHAL (built from vendor/brcm/vhal-core)
+PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
+```
+
+#### Step 3 — Build
+
+```bash
+# From AOSP root — build only vhal-bridge and its dependencies:
+source build/envsetup.sh
+lunch <your_target>
+mmm vendor/brcm/vhal-core
+
+# Or include it in a full build:
+m android.hardware.automotive.vehicle@V4-grpc-service
+```
+
+Binary produced:
+- `out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service`
+
+#### Step 4 — Configure the server address
+
+The service connects to `192.168.10.10:50051` by default (the Instrument Cluster
+Ethernet IP). To change it without rebuilding, set a system property before the
+service starts:
+
+```bash
+adb shell setprop vendor.vhal.grpc.server 192.168.10.10:50051
+adb shell stop vhal-grpc
+adb shell start vhal-grpc
+```
+
+Or edit `packages/vhal-bridge/vhal-grpc-service.rc` to pass the address as a
+command-line argument to the binary and rebuild.
+
+#### Step 5 — Push and test without reflashing
+
+```bash
+adb root && adb remount
+adb push out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service \
+         /vendor/bin/hw/
+adb shell stop vhal-grpc
+adb shell start vhal-grpc
+adb logcat -s VhalBridge
+```
+
+With vhal-core running on the Linux IC and vhal-bridge running on Android, any
+property injected via the Python test client is visible to both sides:
+
+```bash
+# On Linux IC — inject gear change to REVERSE
+python src/vhal-core/test/vhal/vhal_test_client.py --gear reverse --server 192.168.10.10
+
+# On Android — verify it arrived
+adb shell cmd car_service get-property-value 0x11400400 0
+```
+
+---
+
+## Run VHAL Server (Linux)
 
 ```bash
 ./build/Release/packages/vhal-server/vhal-core 
@@ -59,7 +168,7 @@ The server listens on `0.0.0.0:50051` by default.
 
 ---
 
-## Run VHAL Gateway
+## Run VHAL Gateway (Linux)
 
 ```bash
 # Uses default config: packages/vhal-gateway/etc/vhal/gateway-configs.json
