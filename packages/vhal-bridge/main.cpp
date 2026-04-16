@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
-// vhal-bridge: Android VHAL service whose hardware backend is the remote
-// vhal-core gRPC server (running on the Instrument Cluster Linux node).
+// vhal-bridge: Android VHAL service whose hardware backend is the local
+// vhal-core gRPC server running on the same Android node.
 //
 // This replaces the default FakeVehicleHardware-backed VHAL on Android with
 // one that delegates every GetValues / SetValues / Subscribe call to the
-// Linux vhal-core over gRPC (GRPCVehicleHardware).
+// local vhal-core server over gRPC (GRPCVehicleHardware).
 //
 // Android clients (rvc_service, CarService, …) continue to use the normal
 // AIDL / HIDL Vehicle HAL interface — they are unaware of the gRPC bridge.
+//
+// Domain isolation: vhal-bridge never connects to the Linux IC directly.
+// The Linux IC's vhal-gateway pushes property changes into the local
+// vhal-core server (vhal-core-server), which in turn notifies vhal-bridge
+// via StartPropertyValuesStream. The Linux IC is invisible to Android clients.
 
 #define LOG_TAG "VhalBridge"
 
@@ -44,10 +49,10 @@
 using ::android::hardware::automotive::vehicle::DefaultVehicleHal;
 using ::android::hardware::automotive::vehicle::virtualization::GRPCVehicleHardware;
 
-// Default server address: Instrument Cluster Linux node.
+// Default server address: local vhal-core-server on the same Android node.
 // Override at runtime via system property vendor.vhal.grpc.server
 // or pass as the first command-line argument (set in vhal-grpc-service.rc).
-static constexpr const char* kDefaultServerAddr = "192.168.10.10:50051";
+static constexpr const char* kDefaultServerAddr = "127.0.0.1:50051";
 static constexpr const char* kServerAddrProp    = "vendor.vhal.grpc.server";
 static constexpr auto        kConnectTimeout     = std::chrono::milliseconds(10'000);
 

@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// vhal-bridge — Android VHAL service backed by the remote vhal-core gRPC server.
+// vhal-bridge — Android VHAL service backed by the LOCAL vhal-core gRPC server.
 //
-// This is the ONLY Android-targeted build artifact in vhal-core.
-// The Linux side (vhal-server, vhal-gateway) is built by CMake + Conan.
+// Connects to vhal-core-server running on the same Android node (127.0.0.1:50051).
+// Never connects to the Linux IC directly — domain isolation is enforced here.
+// The Linux IC's vhal-gateway is the only cross-domain channel; it pushes
+// property changes into the local vhal-core-server via gRPC SetValues.
+//
+// Built by Soong (Android pipeline). The Linux side (vhal-server, vhal-gateway)
+// is built by CMake + Conan. vhal-server also has an Android.bp that builds
+// vhal-core-server for the Android node.
 //
 // Replaces android.hardware.automotive.vehicle@V4-default-service in device.mk:
 //   PRODUCT_PACKAGES -= android.hardware.automotive.vehicle@V4-default-service

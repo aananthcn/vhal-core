@@ -1,0 +1,21 @@
+# vhal-core-server.rc
+#
+# Android init configuration for the local vhal-core gRPC server.
+#
+# This server runs on the Android Head Unit alongside vhal-bridge.
+# It provides a gRPC endpoint (0.0.0.0:50051) that:
+#   - Accepts inbound SetValues from the Linux IC's vhal-gateway (cross-domain
+#     boundary — the ONLY path by which Linux IC data enters the Android domain)
+#   - Serves vhal-bridge via StartPropertyValuesStream at 127.0.0.1:50051
+#
+# Start order: vhal-core-server must be running before vhal-bridge attempts to
+# connect. vhal-bridge retries automatically, but ordering it first avoids
+# startup log noise.
+
+service vhal-core-server /vendor/bin/vhal-core-server
+    class hal
+    user vehicle_network
+    # inet: required to accept inbound TCP connections from the Linux IC vhal-gateway.
+    group vehicle_network inet
+    ioprio be 4
+    onrestart restart vhal-core-server

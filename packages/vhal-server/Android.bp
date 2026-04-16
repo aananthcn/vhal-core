@@ -1,0 +1,74 @@
+// Copyright (C) 2025 Aananth C N
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// vhal-core gRPC server for the Android Head Unit node.
+//
+// Domain isolation principle: every node runs its own vhal-core server.
+// Android VHAL clients (rvc_service, CarService) never communicate across
+// domain boundaries. They use AIDL binder to reach vhal-bridge, which reads
+// from THIS local server. The Linux IC's vhal-gateway is the only
+// cross-domain channel — it pushes selected properties into this server via
+// gRPC SetValues.
+//
+// Deployment:
+//   /vendor/bin/vhal-core-server          (started by vhal-core-server.rc)
+//
+// vhal-bridge (android.hardware.automotive.vehicle@V4-grpc-service) connects
+// to this server at 127.0.0.1:50051. Deploy both binaries together.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "vhal-core-server",
+    vendor: true,
+    defaults: [
+        "VehicleHalDefaults",
+        "FakeVehicleHardwareDefaults",
+    ],
+    init_rc: ["vhal-core-server.rc"],
+
+    srcs: [
+        "aidl/impl/4/vhal/src/VehicleService.cpp",
+    ],
+
+    static_libs: [
+        // gRPC server adapter: wraps FakeVehicleHardware as a VehicleServer gRPC service.
+        // Provides GRPCVehicleProxyServer (server side of vhal-ipc-grpc).
+        "android.hardware.automotive.vehicle@default-grpc-server-lib",
+
+        // Simulation/property backend — holds the local property store.
+        // Receives SetValues from vhal-gateway and fires change events to subscribers.
+        "FakeVehicleHardware",
+
+        // Core vehicle HAL utilities (VehiclePropertyStore, RecurrentTimer, …).
+        "VehicleHalUtils",
+    ],
+
+    header_libs: [
+        "IVehicleHardware",
+    ],
+
+    shared_libs: [
+        "libgrpc++",
+        "libprotobuf-cpp-full",
+        "libjsoncpp",
+        "liblog",
+    ],
+
+    cflags: [
+        "-Wno-unused-parameter",
+    ],
+}

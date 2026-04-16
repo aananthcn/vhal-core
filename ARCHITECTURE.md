@@ -20,6 +20,19 @@ The implementation version is **V4**, corresponding to Android 16.
 
 ---
 
+## Domain Isolation Principle
+
+Each physical node runs its own vhal-core server. Android VHAL clients never communicate
+directly across domain boundaries.
+
+- **Freedom from interference**: if the Linux IC goes down, the Android HU retains last-known
+  property values and its VHAL stack remains operational.
+- **Controlled sharing**: the only cross-domain channel is vhal-gateway, which runs on the Linux
+  IC and pushes a filtered, configured set of properties into the Android node's local vhal-core
+  server via gRPC SetValues. Android clients are unaware of the Linux IC's existence.
+
+---
+
 ## Package Split
 
 ```
@@ -50,19 +63,20 @@ The implementation version is **V4**, corresponding to Android 16.
        │          │ depends on
        │   ┌──────▼──────────────┐    ┌──────────────────────────────┐
        │   │  vhal-server        │    │  vhal-gateway                │
-       │   │  (Linux server)     │    │  (Linux forwarding daemon)   │
+       │   │  (Linux + Android)  │    │  (Linux only)                │
        │   │                     │    │                              │
        │   │  FakeVehicleHardware│    │  GatewayConfig (JSON loader) │
        │   │  DefaultProperties  │    │  VhalGateway (orchestrator)  │
-       │   │  main()/VehicleServ.│    │  NodeForwarder × N           │
-       │   └─────────────────────┘    │  (one thread per remote node)│
-       │                              └──────────────────────────────┘
+       │   │  VehicleService.cpp │    │  NodeForwarder × N           │
+       │   │  CMakeLists.txt     │    │  (one thread per remote node)│
+       │   │  Android.bp (new)   │    └──────────────────────────────┘
+       │   └─────────────────────┘
        │ depends on (Android only)
        │   ┌──────────────────────────────────────────────────────┐
        └──►│  vhal-bridge                                         │
-           │  (Android VHAL service — client side only)           │
+           │  (Android VHAL service — AIDL frontend)              │
            │                                                      │
-           │  GRPCVehicleHardware  ──gRPC──► vhal-core server     │
+           │  GRPCVehicleHardware → 127.0.0.1:50051 (local)      │
            │  DefaultVehicleHal   (AIDL VHAL framework)           │
            │  main.cpp            (registers IVehicle/default)    │
            │  Android.bp / .rc / .xml                             │
@@ -83,7 +97,8 @@ The server-side class and the client-side Stub both come from the same generated
 ```
 vhal-bridge → vhal-ipc-grpc (GRPCVehicleHardware only) + DefaultVehicleHal
 ```
-vhal-bridge has no dependency on GRPCVehicleProxyServer, vhal-server, or vhal-gateway.
+vhal-bridge has no dependency on GRPCVehicleProxyServer, and never connects to the
+Linux IC. It connects only to the local vhal-core server on the same Android node.
 
 ---
 
@@ -101,10 +116,10 @@ vhal-core/
 │   │   └── .../Android.bp  ← Android builds this
 │   ├── vhal-ipc-grpc/
 │   │   ├── CMakeLists.txt  ← Linux builds this (server + client libs)
-│   │   └── .../Android.bp  ← Android builds this (client lib only linked)
+│   │   └── .../Android.bp  ← Android builds this (server + client libs)
 │   ├── vhal-server/
-│   │   ├── CMakeLists.txt  ← Linux builds this (server binary)
-│   │   └── .../Android.bp  ← Android compiles libraries but nothing links them
+│   │   ├── CMakeLists.txt  ← Linux builds this (vhal-core server binary)
+│   │   └── Android.bp      ← Android builds this (vhal-core-server binary)
 │   ├── vhal-gateway/
 │   │   └── CMakeLists.txt  ← Linux builds this — NO Android.bp → Soong ignores
 │   └── vhal-bridge/
@@ -118,21 +133,23 @@ conan install . --output-folder=build/Release --build=missing
 cmake -B build/Release -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmake \
       -DCMAKE_BUILD_TYPE=Release
 cmake --build build/Release -j$(nproc)
-# Produces: vhal-server binary, vhal-gateway binary
+# Produces: vhal-core (server binary), vhal-gateway binary
 ```
 
-**Android pipeline** — builds only vhal-bridge (the client service):
+**Android pipeline** — builds the local gRPC server and the AIDL bridge:
 ```bash
 # Repo location: <AOSP_ROOT>/vendor/brcm/vhal-core/
-# Placed there via git clone, repo manifest, or direct copy.
 mmm vendor/brcm/vhal-core
-# Produces: android.hardware.automotive.vehicle@V4-grpc-service (vendor/bin/hw/)
+# Produces:
+#   vendor/bin/vhal-core-server            (local gRPC server)
+#   vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service  (AIDL bridge)
 ```
 
-**device.mk change** to activate vhal-bridge on Android:
+**device.mk change** to activate both on Android:
 ```makefile
 # Replace the default fake VHAL with the gRPC-backed bridge
 PRODUCT_PACKAGES -= android.hardware.automotive.vehicle@V4-default-service
+PRODUCT_PACKAGES += vhal-core-server
 PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
 ```
 
@@ -156,48 +173,47 @@ When SOME/IP is adopted:
 ## Runtime Block Diagram
 
 ```
-  Linux (Instrument Cluster — Node A)          Android (Head Unit / RPi5)
-  ══════════════════════════════════           ══════════════════════════════════════
+  Linux IC domain (Node A: 192.168.10.10)         Android HU domain (Node B: 192.168.10.20)
+  ══════════════════════════════════════════       ══════════════════════════════════════════
 
-  ┌──────────────────────────────┐             ┌─────────────────────────────────────┐
-  │  ClusterUI / any Linux client│             │  rvc_service / CarService / etc.    │
-  │  VhalGrpcClient              │             │  (AIDL or HIDL VHAL client)         │
-  │    └── VehicleServer::Stub   │             └──────────────┬──────────────────────┘
-  └──────────────┬───────────────┘                            │ AIDL binder
-                 │ gRPC                                       ▼
-                 │                             ┌─────────────────────────────────────┐
-  ┌──────────────▼───────────────┐             │  vhal-bridge service                │
-  │  vhal-core server (Node A)   │◄────────────┤  DefaultVehicleHal                  │
-  │                              │  gRPC       │    └── GRPCVehicleHardware           │
-  │  GRPCVehicleProxyServer      │  (all RPCs) │         └── VehicleServer::Stub     │
-  │    └── FakeVehicleHardware   │             └─────────────────────────────────────┘
-  │          └── PropertyStore   │
-  │          └── GeneratorHub    │
-  └──────────────▲───────────────┘
-                 │ gRPC SetValues (on change)
-  ┌──────────────┴───────────────┐
-  │  vhal-gateway (Node A)       │
-  │  VhalGateway                 │
-  │    └── GRPCVehicleHardware   │
-  │         (StartPropValStream) │
-  │  NodeForwarder × N           │
-  └──────────────────────────────┘
-        │ gRPC SetValues
-        ▼
-  vhal-core server (Node B, C, …)
-  (remote nodes per gateway-configs.json)
+  ┌─────────────────────────────────┐              ┌──────────────────────────────────────┐
+  │  ClusterUI / any Linux client   │              │  rvc_service / CarService / etc.     │
+  │  VhalGrpcClient                 │              │  (AIDL VHAL client)                  │
+  │    └── VehicleServer::Stub      │              └──────────────┬───────────────────────┘
+  └──────────────┬──────────────────┘                             │ AIDL binder
+                 │ gRPC                                           ▼
+                 ▼                              ┌──────────────────────────────────────────┐
+  ┌──────────────────────────────────┐          │  vhal-bridge                             │
+  │  vhal-core server (primary)      │          │  DefaultVehicleHal                       │
+  │  GRPCVehicleProxyServer          │          │    └── GRPCVehicleHardware               │
+  │    └── FakeVehicleHardware       │          │         (127.0.0.1:50051)               │
+  │          └── PropertyStore       │          └──────────────┬───────────────────────────┘
+  │          └── GeneratorHub        │                         │ gRPC (loopback)
+  └──────────────▲───────────────────┘                         ▼
+                 │ StartPropertyValuesStream     ┌──────────────────────────────────────────┐
+  ┌──────────────┴───────────────────┐           │  vhal-core server (local)                │
+  │  vhal-gateway                    │─gRPC─────►│  GRPCVehicleProxyServer                  │
+  │  (controlled cross-domain        │  SetValues│    └── FakeVehicleHardware               │
+  │   boundary — ONLY path in)       │           │          └── PropertyStore               │
+  │  NodeForwarder × N               │           └──────────────────────────────────────────┘
+  │  (filtered property set)         │
+  └──────────────────────────────────┘
 ```
 
-**Data flow for gear change (Python test → Android camera):**
+**Data flow for gear change (Python test → Android rvc_service):**
 ```
 python vhal_test_client.py --gear reverse --server 192.168.10.10
-  → vhal-core gRPC server (SetValues GEAR_SELECTION=8)
+  → Linux vhal-core gRPC server (SetValues GEAR_SELECTION=8)
     → FakeVehicleHardware (property updated, change event fired)
-      → GRPCVehicleProxyServer (StartPropertyValuesStream push)
-        → vhal-bridge GRPCVehicleHardware (stream event received)
-          → DefaultVehicleHal (property change callback)
-            → rvc_service GearSelectionMonitor (GEAR_SELECTION=REVERSE)
-              → CameraStreamManager.open() → H.264 RTP stream starts
+      → GRPCVehicleProxyServer (StartPropertyValuesStream push to vhal-gateway)
+        → vhal-gateway NodeForwarder (GEAR_SELECTION listed in gateway-configs.json)
+          → Android vhal-core server SetValues (cross-domain boundary crossed here only)
+            → FakeVehicleHardware (property updated, change event fired)
+              → GRPCVehicleProxyServer (StartPropertyValuesStream push to vhal-bridge)
+                → vhal-bridge GRPCVehicleHardware (stream event from 127.0.0.1)
+                  → DefaultVehicleHal (property change callback)
+                    → rvc_service GearSelectionMonitor (GEAR_SELECTION=REVERSE)
+                      → CameraStreamManager.open() → H.264 RTP stream starts
 ```
 
 Connection lifecycle logging (in GRPCVehicleProxyServer):
@@ -263,9 +279,13 @@ vhal-core/
 
 | Decision | Detail |
 | :--- | :--- |
-| Four-package split | vhal-types / vhal-ipc-grpc / vhal-server / vhal-gateway — see Package Split above |
+| Domain isolation | Each node runs its own vhal-core server. Android clients never communicate across domain boundaries. vhal-gateway is the only cross-domain channel. |
+| vhal-server on Android | packages/vhal-server/Android.bp builds `vhal-core-server` for the Android HU; listens on 0.0.0.0:50051 for gateway pushes and on 127.0.0.1:50051 for vhal-bridge |
+| vhal-bridge connects locally | Default address is 127.0.0.1:50051 (same Android node). Never connects to the Linux IC. Override via vendor.vhal.grpc.server sysprop only if running a non-standard topology. |
+| vhal-gateway role | Sole cross-domain channel on the Linux IC. Forwards a configured, filtered set of properties to each remote node's vhal-core server via gRPC SetValues. |
+| Five-package split | vhal-types / vhal-ipc-grpc / vhal-server / vhal-gateway (Linux+Android) / vhal-bridge (Android only) — see Package Split above |
 | vhal-gateway threading | One NodeForwarder thread per remote node; callback thread never blocked by remote I/O |
-| vhal-gateway config | gateway-configs.json: version + array of { ipaddr, propertyIds[] }; source in etc/vhal/ |
+| vhal-gateway config | gateway-configs.json: version + array of { ipaddr, messages: [ { msgId, properties[] } ] }; source in packages/vhal-gateway/etc/vhal/ |
 | Transport abstraction | IVehicleHardware decouples backend from transport |
 | Current transport | gRPC replaces Binder; GRPCVehicleProxyServer is the server adapter |
 | Planned transport | SOME/IP (vsomeip); entire vhal-ipc-grpc replaced, nothing else changes |
@@ -273,8 +293,8 @@ vhal-core/
 | Property definitions | aidl_property/ — 117 vehicle property types |
 | Android header stubs | stubs/ provides Linux replacements for Android-specific headers |
 | AIDL → C++ | scripts/generate_aidl_headers.py; output under build/generated/aidl/ |
-| Build system | All Android.bp (Soong) replaced by CMakeLists.txt + Conan |
-| Binder | Stubbed out — not used on the gRPC path |
+| Build system | CMake + Conan for Linux; Soong (Android.bp) for Android — one repo, two pipelines |
+| Binder | Stubbed out on Linux — not used on the gRPC path |
 | LargeParcelableBase | Stubbed as no-op — gRPC handles large messages natively |
 | Include order guard | GRPCVehicleProxyServer.h must precede FakeVehicleHardware.h in any TU that includes both — grpc networking headers define TRY_AGAIN (netdb.h) which breaks the proto StatusCode enum |
 
@@ -297,7 +317,6 @@ vhal-core/
 | `hardware/interfaces/automotive/vehicle/proto/` | HIDL V2.0 era proto — obsolete |
 | `hardware/interfaces/automotive/vehicle/2.0/` | HIDL V2 implementation — obsolete |
 | `packages/services/Car/cpp/vhal/` | Android-side Binder/AIDL client — replaced by gRPC stub |
-| `All Android.bp files` | Soong build system — replaced by CMakeLists.txt |
 
 ---
 
@@ -316,3 +335,4 @@ vhal-core/
 | `aidl/impl/4/utils/common/` | VehiclePropertyStore, RecurrentTimer, core utilities |
 | `aidl/impl/4/vhal/` | Service entry point — Binder init removed, gRPC server substituted |
 | `aidl_property/android/` | Full property enum universe — authoritative source of all car properties |
+| `packages/vhal-server/aidl/impl/4/vhal/Android.bp` | Retained original Soong libs (DefaultVehicleHal, FakeVehicleHardware) — used by vhal-bridge and vhal-core-server |

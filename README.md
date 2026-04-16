@@ -7,6 +7,22 @@ For architecture details, design decisions, and folder structure see [ARCHITECTU
 
 ---
 
+## Domain Isolation
+
+Each node (Linux IC, Android HU) runs its own vhal-core server. Nodes never communicate
+directly with each other's server — vhal-gateway is the only cross-domain channel.
+
+```
+Linux IC (192.168.10.10)                   Android HU (192.168.10.20)
+═══════════════════════════                ══════════════════════════════════
+vhal-core server (primary)                 vhal-core-server (local)
+vhal-gateway ──gRPC SetValues────────────► (receives gateway pushes)
+                                           vhal-bridge ──127.0.0.1:50051──► vhal-core-server
+                                           rvc_service ──AIDL──► vhal-bridge
+```
+
+---
+
 ## Getting Started
 
 vhal-core targets **two independent build pipelines** from the same repo:
@@ -14,7 +30,7 @@ vhal-core targets **two independent build pipelines** from the same repo:
 | Pipeline | Target | Build system | Produces |
 |---|---|---|---|
 | Linux | Instrument Cluster (RPi OS, QNX) | CMake + Conan | `vhal-core` server + `vhal-gateway` daemon |
-| Android | Head Unit / AAOS (RPi5) | Soong (Android.bp) | `android.hardware.automotive.vehicle@V4-grpc-service` |
+| Android | Head Unit / AAOS (RPi5) | Soong (Android.bp) | `vhal-core-server` (local gRPC server) + `android.hardware.automotive.vehicle@V4-grpc-service` (AIDL bridge) |
 
 ---
 
@@ -60,9 +76,12 @@ Binaries produced:
 
 ### Getting Started — Android (AAOS Head Unit)
 
-vhal-bridge is the Android VHAL service built from this repo. It replaces the
-default `FakeVehicleHardware`-backed VHAL with one that connects to the Linux
-vhal-core gRPC server over Ethernet.
+The Android build produces two binaries that work together:
+- **`vhal-core-server`** — a local gRPC server holding the Android node's property store.
+  Receives property updates from the Linux IC via vhal-gateway.
+- **`android.hardware.automotive.vehicle@V4-grpc-service`** (vhal-bridge) — the Android VHAL
+  AIDL service. Connects to `vhal-core-server` at `127.0.0.1:50051`. Android clients
+  (rvc_service, CarService) use this service via the normal AIDL binder interface.
 
 #### Step 1 — Place the repo in the AOSP vendor tree
 
@@ -83,67 +102,91 @@ Or add it to your `repo` manifest so it is fetched automatically on `repo sync`:
          revision="main" />
 ```
 
-#### Step 2 — Activate vhal-bridge in the device build
+#### Step 2 — Activate both packages in the device build
 
-In your device's `device.mk`, swap out the default VHAL for the gRPC-backed one:
+In your device's `device.mk`:
 
 ```makefile
 # Remove the default fake VHAL
 PRODUCT_PACKAGES -= android.hardware.automotive.vehicle@V4-default-service
 
-# Add the gRPC bridge VHAL (built from vendor/brcm/vhal-core)
+# Add the local gRPC server and the AIDL bridge (both built from vendor/brcm/vhal-core)
+PRODUCT_PACKAGES += vhal-core-server
 PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
 ```
 
 #### Step 3 — Build
 
 ```bash
-# From AOSP root — build only vhal-bridge and its dependencies:
+# From AOSP root — build vhal-core-server, vhal-bridge, and their dependencies:
 source build/envsetup.sh
 lunch <your_target>
 mmm vendor/brcm/vhal-core
-
-# Or include it in a full build:
-m android.hardware.automotive.vehicle@V4-grpc-service
 ```
 
-Binary produced:
+Binaries produced:
+- `out/target/product/<device>/vendor/bin/vhal-core-server`
 - `out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service`
 
-#### Step 4 — Configure the server address
+#### Step 4 — Configure vhal-gateway on the Linux IC
 
-The service connects to `192.168.10.10:50051` by default (the Instrument Cluster
-Ethernet IP). To change it without rebuilding, set a system property before the
-service starts:
+vhal-bridge connects to the local vhal-core-server at `127.0.0.1:50051` by default —
+no Android-side configuration is needed.
 
-```bash
-adb shell setprop vendor.vhal.grpc.server 192.168.10.10:50051
-adb shell stop vhal-grpc
-adb shell start vhal-grpc
+On the Linux IC, configure vhal-gateway to forward property changes to the Android HU.
+Edit `packages/vhal-gateway/etc/vhal/gateway-configs.json` (or the deployed copy at
+`/opt/car-ui/etc/vhal/gateway-configs.json`) so that `ipaddr` points to the Android HU:
+
+```json
+{
+    "version": "1.0",
+    "gatewayNodes": [
+        {
+            "ipaddr": "192.168.10.20:50051",
+            "messages": [
+                {
+                    "msgId": "ivi-basic",
+                    "properties": [
+                        {"id": "0x11400400", "desc": "GEAR_SELECTION"},
+                        {"id": "0x11600207", "desc": "PERF_VEHICLE_SPEED"}
+                    ]
+                }
+            ]
+        }
+    ]
+}
 ```
 
-Or edit `packages/vhal-bridge/vhal-grpc-service.rc` to pass the address as a
-command-line argument to the binary and rebuild.
+Replace `192.168.10.20` with the actual Ethernet IP of the Android HU.
 
 #### Step 5 — Push and test without reflashing
 
 ```bash
 adb root && adb remount
+
+# Push both binaries
+adb push out/target/product/<device>/vendor/bin/vhal-core-server \
+         /vendor/bin/vhal-core-server
 adb push out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service \
          /vendor/bin/hw/
+
+# Restart both services (vhal-core-server first — vhal-bridge depends on it)
+adb shell stop vhal-core-server
+adb shell start vhal-core-server
 adb shell stop vhal-grpc
 adb shell start vhal-grpc
-adb logcat -s VhalBridge
+
+adb logcat -s VhalBridge VehicleService
 ```
 
-With vhal-core running on the Linux IC and vhal-bridge running on Android, any
-property injected via the Python test client is visible to both sides:
+With vhal-core running on the Linux IC, vhal-gateway configured to forward to the Android HU,
+and both Android binaries running, a property injected on the Linux IC reaches Android:
 
 ```bash
 # On Linux IC — inject gear change to REVERSE
 python src/vhal-core/test/vhal/vhal_test_client.py --gear reverse --server 192.168.10.10
 
-# On Android — verify it arrived
+# On Android — verify it arrived via gateway → local vhal-core-server → vhal-bridge
 adb shell cmd car_service get-property-value 0x11400400 0
 ```
 
@@ -152,7 +195,7 @@ adb shell cmd car_service get-property-value 0x11400400 0
 ## Run VHAL Server (Linux)
 
 ```bash
-./build/Release/packages/vhal-server/vhal-core 
+./build/Release/packages/vhal-server/vhal-core
 ./build/Release/packages/vhal-server/vhal-core 0.0.0.0:50052
 ```
 
@@ -180,6 +223,7 @@ The server listens on `0.0.0.0:50051` by default.
 
 The gateway connects to the local vhal-core, subscribes to all property change events,
 and forwards matching properties to each configured remote node on change.
+The remote node must be running its own vhal-core server to receive the forwarded values.
 
 Config file format (`packages/vhal-gateway/etc/vhal/gateway-configs.json`):
 ```json
@@ -187,7 +231,7 @@ Config file format (`packages/vhal-gateway/etc/vhal/gateway-configs.json`):
     "version": "1.0",
     "gatewayNodes": [
         {
-            "ipaddr": "192.168.1.20:50051",
+            "ipaddr": "192.168.10.20:50051",
             "messages": [
                 {
                     "msgId": "ivi-basic",
@@ -201,6 +245,7 @@ Config file format (`packages/vhal-gateway/etc/vhal/gateway-configs.json`):
     ]
 }
 ```
+
 Each `messages` entry is a named group of properties. Property IDs are hex strings matching
 the VHAL property enum values. When any property in a group changes, that group's changed
 values are sent as a single `SetValues` call. Groups with no changed properties are not sent.
