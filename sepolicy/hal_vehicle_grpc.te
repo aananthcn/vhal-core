@@ -1,22 +1,24 @@
 # Domain for the gRPC-backed AIDL Vehicle HAL service (vhal-bridge).
 # Binary: /vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service
 #
-# Connects as a gRPC client to vhal-core-server at 127.0.0.1:50051, then
-# registers android.hardware.automotive.vehicle.IVehicle/default with
-# servicemanager so Android clients (rvc_service, CarService) can reach it
-# via the normal AIDL binder interface.
+# NOTE: Three interlocked neverallows in AOSP system policy make it impossible
+# to be a hal_vehicle_server AND use tcp_socket simultaneously:
+#   1. add_service(hal_vehicle_server, hal_vehicle_service) neverallows any
+#      domain without hal_vehicle_server from adding hal_vehicle_service.
+#   2. hal_attribute(vehicle) neverallows hal_vehicle_server without
+#      halserverdomain from forking.
+#   3. hal_neverallows.te neverallows halserverdomain from using tcp_socket.
+#
+# hal_vehicle_grpc needs tcp_socket (gRPC client to vhal-core-server), so all
+# hal_vehicle* attributes and service_manager rules are omitted here.
+# The device runs with androidboot.selinux=permissive; binder service registration
+# and client calls work at runtime without explicit allow rules in permissive mode.
+# Revisit for enforcing mode via BOARD_PLAT_PRIVATE_SEPOLICY_DIR exemption.
 
 type hal_vehicle_grpc, domain;
 type hal_vehicle_grpc_exec, exec_type, vendor_file_type, file_type;
 
-# Allow init to transition into this domain on exec.
 init_daemon_domain(hal_vehicle_grpc)
 
-# Register as the AIDL Vehicle HAL server; grants hal_vehicle_server attribute
-# so AOSP system policy (hal_vehicle.te) allows binder calls from HAL clients.
-hal_server_domain(hal_vehicle_grpc, hal_vehicle)
-
-# gRPC TCP client — connect to vhal-core-server on localhost:50051
-# vhal_server_port is declared in vhal_core_server.te.
+# gRPC TCP client — connect to vhal-core-server on localhost:50051.
 allow hal_vehicle_grpc self:tcp_socket { create connect read write setopt getopt shutdown };
-allow hal_vehicle_grpc vhal_server_port:tcp_socket name_connect;
