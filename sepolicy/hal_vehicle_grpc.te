@@ -1,0 +1,22 @@
+# Domain for the gRPC-backed AIDL Vehicle HAL service (vhal-bridge).
+# Binary: /vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service
+#
+# Connects as a gRPC client to vhal-core-server at 127.0.0.1:50051, then
+# registers android.hardware.automotive.vehicle.IVehicle/default with
+# servicemanager so Android clients (rvc_service, CarService) can reach it
+# via the normal AIDL binder interface.
+
+type hal_vehicle_grpc, domain;
+type hal_vehicle_grpc_exec, exec_type, vendor_file_type, file_type;
+
+# Allow init to transition into this domain on exec.
+init_daemon_domain(hal_vehicle_grpc)
+
+# Register as the AIDL Vehicle HAL server; grants hal_vehicle_server attribute
+# so AOSP system policy (hal_vehicle.te) allows binder calls from HAL clients.
+hal_server_domain(hal_vehicle_grpc, hal_vehicle)
+
+# gRPC TCP client — connect to vhal-core-server on localhost:50051
+# vhal_server_port is declared in vhal_core_server.te.
+allow hal_vehicle_grpc self:tcp_socket { create connect read write setopt getopt shutdown };
+allow hal_vehicle_grpc vhal_server_port:tcp_socket name_connect;

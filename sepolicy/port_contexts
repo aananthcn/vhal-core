@@ -1,0 +1,4 @@
+# Port 50051 — gRPC endpoint for vhal-core-server.
+# vhal-core-server binds to 0.0.0.0:50051; hal_vehicle_grpc connects to 127.0.0.1:50051.
+# vhal_server_port type is declared in vhal_core_server.te.
+vhal_server_port    tcp    50051

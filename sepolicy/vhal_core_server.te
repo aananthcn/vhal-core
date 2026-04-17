@@ -1,0 +1,25 @@
+# Domain for the local VHAL gRPC server (/vendor/bin/vhal-core-server).
+#
+# Runs on the Android Head Unit as the Android domain's VHAL property store.
+# Listens on 0.0.0.0:50051:
+#   - Accepts inbound SetValues pushes from the Linux IC's vhal-gateway
+#     (the sole controlled cross-domain channel)
+#   - Serves vhal-bridge (hal_vehicle_grpc) on 127.0.0.1:50051
+
+type vhal_core_server, domain;
+type vhal_core_server_exec, exec_type, vendor_file_type, file_type;
+
+# Label TCP port 50051 used by vhal-core-server (declared once; shared with hal_vehicle_grpc).
+type vhal_server_port, port_type;
+
+# Allow init to transition into this domain on exec of vhal-core-server.
+init_daemon_domain(vhal_core_server)
+
+# gRPC TCP server — bind/listen/accept on port 50051
+allow vhal_core_server self:tcp_socket { create bind listen accept read write setopt getopt shutdown };
+allow vhal_core_server vhal_server_port:tcp_socket name_bind;
+allow vhal_core_server node:tcp_socket node_bind;
+
+# Read DefaultProperties.json and other vehicle config files from vendor partition
+allow vhal_core_server vendor_file:dir r_dir_perms;
+allow vhal_core_server vendor_file:file r_file_perms;

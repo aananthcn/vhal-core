@@ -1,0 +1,8 @@
+# SELinux file contexts for vhal-core vendor binaries.
+# Added to BOARD_SEPOLICY_DIRS in device/brcm/rpi5/BoardConfig.mk.
+
+# Local VHAL gRPC server (Android domain property store)
+/vendor/bin/vhal-core-server    u:object_r:vhal_core_server_exec:s0
+
+# gRPC-backed AIDL Vehicle HAL bridge (connects to local vhal-core-server)
+/vendor/bin/hw/android\.hardware\.automotive\.vehicle@V4-grpc-service    u:object_r:hal_vehicle_grpc_exec:s0
