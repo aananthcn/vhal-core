@@ -11,6 +11,7 @@ type vhal_core_server_exec, exec_type, vendor_file_type, file_type;
 
 # Label TCP port 50051 used by vhal-core-server (declared once; shared with hal_vehicle_grpc).
 type vhal_server_port, port_type;
+portcon tcp 50051 u:object_r:vhal_server_port:s0
 
 # Allow init to transition into this domain on exec of vhal-core-server.
 init_daemon_domain(vhal_core_server)
