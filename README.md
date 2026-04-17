@@ -120,7 +120,7 @@ PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
 ```bash
 # From AOSP root — build vhal-core-server, vhal-bridge, and their dependencies:
 source build/envsetup.sh
-lunch <your_target>
+lunch aosp_rpi5_car-bp4a-userdebug
 mmm vendor/brcm/vhal-core
 ```
 

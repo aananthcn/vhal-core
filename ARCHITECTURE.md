@@ -112,19 +112,30 @@ vhal-core/
 ├── CMakeLists.txt          ← Linux pipeline entry point (CMake + Conan)
 ├── packages/
 │   ├── vhal-types/
-│   │   ├── CMakeLists.txt  ← Linux builds this
-│   │   └── .../Android.bp  ← Android builds this
+│   │   └── CMakeLists.txt  ← Linux builds this — NO Android.bp (AOSP provides these modules)
 │   ├── vhal-ipc-grpc/
-│   │   ├── CMakeLists.txt  ← Linux builds this (server + client libs)
-│   │   └── .../Android.bp  ← Android builds this (server + client libs)
+│   │   └── CMakeLists.txt  ← Linux builds this — NO Android.bp (AOSP provides these modules)
 │   ├── vhal-server/
 │   │   ├── CMakeLists.txt  ← Linux builds this (vhal-core server binary)
-│   │   └── Android.bp      ← Android builds this (vhal-core-server binary)
+│   │   └── Android.bp      ← Android builds this (vhal-core-server binary) ← ONLY NEW MODULE
 │   ├── vhal-gateway/
 │   │   └── CMakeLists.txt  ← Linux builds this — NO Android.bp → Soong ignores
 │   └── vhal-bridge/
-│       └── Android.bp      ← Android builds this — NO CMakeLists.txt → CMake ignores
+│       └── Android.bp      ← Android builds this — NO CMakeLists.txt → CMake ignores ← ONLY NEW MODULE
 ```
+
+**Why only two Android.bp files?**
+All sub-package Android.bp files inside vhal-types/, vhal-ipc-grpc/, and vhal-server/aidl/ were
+verbatim copies of AOSP modules from `hardware/interfaces/automotive/vehicle/`. When vhal-core is
+placed at `vendor/brcm/vhal-core/` in an AOSP tree, Soong finds both the platform copy and the
+vendor copy of each module and fails with "module already defined". These duplicate files have been
+intentionally deleted. The two surviving Android.bp files define **new** module names that do not
+exist in the platform:
+- `vhal-core-server` — the local gRPC server binary for the Android HU
+- `android.hardware.automotive.vehicle@V4-grpc-service` — the AIDL bridge binary
+
+Both reference existing AOSP modules (FakeVehicleHardware, DefaultVehicleHal, VehicleHalUtils, etc.)
+by name; Soong resolves them from `hardware/interfaces/automotive/vehicle/`.
 
 **Linux pipeline** — builds the server and gateway binaries:
 ```bash
@@ -317,6 +328,7 @@ vhal-core/
 | `hardware/interfaces/automotive/vehicle/proto/` | HIDL V2.0 era proto — obsolete |
 | `hardware/interfaces/automotive/vehicle/2.0/` | HIDL V2 implementation — obsolete |
 | `packages/services/Car/cpp/vhal/` | Android-side Binder/AIDL client — replaced by gRPC stub |
+| Sub-package `Android.bp` files | Verbatim AOSP copies that duplicate platform modules — deleted to prevent Soong "already defined" errors; only `vhal-server/Android.bp` and `vhal-bridge/Android.bp` are kept |
 
 ---
 

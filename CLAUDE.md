@@ -76,6 +76,15 @@ client stub VehicleServer::Stub). They have no compile-time dependency on vhal-s
 - Linux build: CMake + Conan; Android build: Soong (Android.bp) — one repo, two pipelines
 - vhal-server has BOTH CMakeLists.txt (Linux) AND Android.bp (Android) — runs on both nodes
 - vhal-bridge/ has no CMakeLists.txt (Android-only); vhal-gateway/ has no Android.bp (Linux IC-only)
+- Only TWO Android.bp files exist in the entire vhal-core repo:
+    packages/vhal-server/Android.bp  → builds vhal-core-server (unique name, not in AOSP)
+    packages/vhal-bridge/Android.bp  → builds V4-grpc-service (unique name, not in AOSP)
+  All other Android.bp files (in vhal-types/, vhal-ipc-grpc/, vhal-server/aidl/) were AOSP
+  verbatim copies. They are intentionally deleted — AOSP already provides those modules at
+  hardware/interfaces/automotive/vehicle/. Keeping them in vendor/ causes "module already
+  defined" duplicate errors in Soong. The two surviving Android.bp files reference AOSP
+  modules (FakeVehicleHardware, DefaultVehicleHal, etc.) by name, which Soong resolves
+  from the platform source.
 - vhal-bridge default address is 127.0.0.1:50051 — connects only to the local vhal-core-server
 - vhal-gateway is the sole cross-domain channel; its config lists the remote node IPs
 - Binder/libbinder_ndk is stubbed out on Linux — not used on gRPC path
