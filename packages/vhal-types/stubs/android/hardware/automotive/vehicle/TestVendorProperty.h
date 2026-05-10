@@ -14,6 +14,9 @@ enum class TestVendorProperty : int32_t {
     VENDOR_PROPERTY_FOR_ERROR_CODE_TESTING = 0x21030002,
     VENDOR_CLUSTER_SWITCH_UI              = 0x21030010,
     VENDOR_CLUSTER_DISPLAY_STATE          = 0x21030011,
+
+    // Velan voice assistant trigger. int32_values[0]: 0 = OFF, 1 = ON.
+    VOICE_ASSIST_TRIGGER                  = 0x21400001,
 };
 
 } // namespace vehicle

@@ -1,0 +1,14 @@
+{
+    "apiVersion": 2,
+    "properties": [
+        {
+            "comment": "VOICE_ASSIST_TRIGGER — 0x21400001 (VENDOR | GLOBAL | INT32 | 0x0001). int32_values[0]: 0=OFF 1=ON",
+            "property": 557842433,
+            "defaultValue": {
+                "int32Values": [0]
+            },
+            "access": "VehiclePropertyAccess::READ_WRITE",
+            "changeMode": "VehiclePropertyChangeMode::ON_CHANGE"
+        }
+    ]
+}
