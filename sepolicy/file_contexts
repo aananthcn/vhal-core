@@ -1,5 +1,5 @@
 # SELinux file contexts for vhal-core vendor binaries.
-# Added to BOARD_SEPOLICY_DIRS in device/brcm/rpi5/BoardConfig.mk.
+# Added to BOARD_SEPOLICY_DIRS in device/brcm/rpi/BoardConfig.mk.
 
 # Local VHAL gRPC server (Android domain property store)
 /vendor/bin/vhal-core-server    u:object_r:vhal_core_server_exec:s0

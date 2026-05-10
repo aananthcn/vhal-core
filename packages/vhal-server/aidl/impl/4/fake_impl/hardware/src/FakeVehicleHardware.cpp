@@ -2858,6 +2858,7 @@ StatusCode FakeVehicleHardware::subscribePropIdAreaIdLocked(
             registerRefreshLocked(propIdAreaId, eventMode, sampleRateHz);
             return StatusCode::OK;
     }
+    return StatusCode::INVALID_ARG;
 }
 
 StatusCode FakeVehicleHardware::unsubscribe(int32_t propId, int32_t areaId) {

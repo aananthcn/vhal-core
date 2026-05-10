@@ -139,7 +139,7 @@ by name; Soong resolves them from `hardware/interfaces/automotive/vehicle/`.
 
 **Linux pipeline** — builds the server and gateway binaries:
 ```bash
-# Repo location: ~/labs/ui/ic-rpi5/src/vhal-core/  (or any path)
+# Repo location: ~/labs/ui/ic-rpi/src/vhal-core/  (or any path)
 conan install . --output-folder=build/Release --build=missing
 cmake -B build/Release -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmake \
       -DCMAKE_BUILD_TYPE=Release

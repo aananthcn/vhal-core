@@ -30,7 +30,7 @@ vhal-core targets **two independent build pipelines** from the same repo:
 | Pipeline | Target | Build system | Produces |
 |---|---|---|---|
 | Linux | Instrument Cluster (RPi OS, QNX) | CMake + Conan | `vhal-core` server + `vhal-gateway` daemon |
-| Android | Head Unit / AAOS (RPi5) | Soong (Android.bp) | `vhal-core-server` (local gRPC server) + `android.hardware.automotive.vehicle@V4-grpc-service` (AIDL bridge) |
+| Android | Head Unit / AAOS (RPi) | Soong (Android.bp) | `vhal-core-server` (local gRPC server) + `android.hardware.automotive.vehicle@V4-grpc-service` (AIDL bridge) |
 
 ---
 
@@ -53,7 +53,7 @@ cd ~/path/to/vhal-core
 #### Build
 
 ```bash
-# Detect the host build profile (run once per machine)
+# Detect the pc build profile (run once per machine)
 conan profile detect
 
 # Install dependencies
@@ -120,7 +120,7 @@ PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
 ```bash
 # From AOSP root — build vhal-core-server, vhal-bridge, and their dependencies:
 source build/envsetup.sh
-lunch aosp_rpi5_car-bp4a-userdebug
+lunch aosp_rpi_car-bp4a-userdebug
 mmm vendor/brcm/vhal-core
 ```
 
