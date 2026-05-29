@@ -163,7 +163,7 @@ Replace `192.168.10.20` with the actual Ethernet IP of the Android HU.
 
 ```bash
 adb root
-adb shell mount -o remount,rw /
+adb shell mount -o remount,rw /vendor
 
 # Push both binaries
 adb push out/target/product/rpi5/vendor/bin/vhal-core-server \
