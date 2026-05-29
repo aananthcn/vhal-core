@@ -162,13 +162,8 @@ Replace `192.168.10.20` with the actual Ethernet IP of the Android HU.
 #### Step 5 — Push and test without reflashing
 
 ```bash
-# One-time setup: disable dm-verity so /vendor can be remounted rw
 adb root
-adb disable-verity
-adb reboot
-
-# After reboot:
-adb root && adb remount
+adb shell mount -o remount,rw /
 
 # Push both binaries
 adb push out/target/product/rpi5/vendor/bin/vhal-core-server \
