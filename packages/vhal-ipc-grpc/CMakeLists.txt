@@ -11,8 +11,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(protobuf REQUIRED CONFIG)
 find_package(gRPC     REQUIRED CONFIG)
 
-get_target_property(PROTOC_EXE      protobuf::protoc       IMPORTED_LOCATION)
-get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin  IMPORTED_LOCATION)
+# Conan's find_program() picks up system tools (old protoc, old grpc_cpp_plugin)
+# before the Conan-installed ones, causing protobuf version mismatch errors.
+# Use the Conan package folder variables (set by find_package via CMakeDeps) to
+# locate the exact binaries from the installed packages.
+if(NOT protobuf_PACKAGE_FOLDER_RELEASE)
+    message(FATAL_ERROR "protobuf_PACKAGE_FOLDER_RELEASE not set — run conan install first")
+endif()
+if(NOT grpc_PACKAGE_FOLDER_RELEASE)
+    message(FATAL_ERROR "grpc_PACKAGE_FOLDER_RELEASE not set — run conan install first")
+endif()
+
+find_program(PROTOC_EXE NAMES protoc
+    PATHS "${protobuf_PACKAGE_FOLDER_RELEASE}/bin" NO_DEFAULT_PATH REQUIRED)
+find_program(GRPC_CPP_PLUGIN NAMES grpc_cpp_plugin
+    PATHS "${grpc_PACKAGE_FOLDER_RELEASE}/bin" NO_DEFAULT_PATH REQUIRED)
+
+message(STATUS "Using protoc:          ${PROTOC_EXE}")
+message(STATUS "Using grpc_cpp_plugin: ${GRPC_CPP_PLUGIN}")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # vhal-types dependency (consumed via Conan find_package or add_subdirectory)

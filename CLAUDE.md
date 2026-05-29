@@ -98,7 +98,8 @@ client stub VehicleServer::Stub). They have no compile-time dependency on vhal-s
 ### Linux (CMake + Conan)
 ```bash
 conan install . --output-folder=build/Release --build=missing
-cmake -B build/Release -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmake \
+cmake -B build/Release \
+      -DCMAKE_TOOLCHAIN_FILE=build/Release/conan_toolchain.cmake \
       -DCMAKE_BUILD_TYPE=Release
 cmake --build build/Release -j$(nproc)
 ```

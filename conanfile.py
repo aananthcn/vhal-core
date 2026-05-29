@@ -1,5 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMakeDeps, cmake_layout
+from conan.tools.env import VirtualBuildEnv
 
 
 class VhalCoreWorkspaceConan(ConanFile):
@@ -23,9 +24,4 @@ class VhalCoreWorkspaceConan(ConanFile):
         "jsoncpp/1.9.5",
     )
 
-    generators = "CMakeDeps", "CMakeToolchain"
-
-    def layout(self):
-        self.folders.source = "."
-        self.folders.build = "build/Release"
-        self.folders.generators = "build/Release"
+    generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv"
