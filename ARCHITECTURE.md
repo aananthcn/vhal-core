@@ -36,6 +36,17 @@ directly across domain boundaries.
 ## Package Split
 
 ```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  vhal-proto          (proto text files — platform-independent)            │
+│                                                                           │
+│  VehicleServer.proto (gRPC service definition)                            │
+│  android/hardware/automotive/vehicle/*.proto  (19 message-type protos)    │
+│                                                                           │
+│  Conan package_type = "header-library".  No settings — same binary for   │
+│  all architectures.  Consumed by any external project (Velan, ClusterUI) │
+│  that needs to run protoc without a hardcoded path into vhal-core.        │
+└───────────────────────────────────────────────────────────────────────────┘
+
 ┌─────────────────────────────────────────────────────────────────┐
 │  vhal-types          (transport-agnostic, permanent)            │
 │                                                                 │
@@ -255,7 +266,7 @@ Client side (vhal-ipc-grpc):           Server side (vhal-ipc-grpc):
 ```
 vhal-core/
 ├── CMakeLists.txt              # Top-level build (single package today, three-package target)
-├── conanfile.py                # Conan dependency manifest
+├── conanfile.py                # Conan dependency manifest (workspace convenience)
 ├── stubs/                      # Linux replacements for Android-specific headers
 ├── scripts/
 │   └── generate_aidl_headers.py  # Converts .aidl files to C++ headers
@@ -263,6 +274,17 @@ vhal-core/
 │   └── vhal/
 │       └── vhalconfig/
 │           └── DefaultProperties.json  # Initial property values
+│
+├── packages/
+│   ├── vhal-proto/             # ← Conan header-library; proto files for external consumers
+│   │   ├── conanfile.py        #   package_type="header-library", no settings
+│   │   └── proto/              #   VehicleServer.proto + android/…/vehicle/*.proto
+│   │
+│   ├── vhal-types/             # [see Package Split above]
+│   ├── vhal-ipc-grpc/          # [see Package Split above]
+│   ├── vhal-server/            # [see Package Split above]
+│   ├── vhal-gateway/           # [see Package Split above]
+│   └── vhal-bridge/            # [see Package Split above]
 │
 ├── aidl/                       # from hardware/interfaces/automotive/vehicle/aidl/
 │   ├── android/                # AIDL interface definitions
@@ -290,6 +312,7 @@ vhal-core/
 
 | Decision | Detail |
 | :--- | :--- |
+| vhal-proto distribution | Proto text files packaged as a Conan `header-library` (`packages/vhal-proto/`) so external consumers (Velan, ClusterUI) declare `requires = "vhal-proto/1.0"` and resolve the proto directory at CMake configure time via `INTERFACE_INCLUDE_DIRECTORIES` — no hardcoded paths, portable across machines. |
 | Domain isolation | Each node runs its own vhal-core server. Android clients never communicate across domain boundaries. vhal-gateway is the only cross-domain channel. |
 | vhal-server on Android | packages/vhal-server/Android.bp builds `vhal-core-server` for the Android HU; listens on 0.0.0.0:50051 for gateway pushes and on 127.0.0.1:50051 for vhal-bridge |
 | vhal-bridge connects locally | Default address is 127.0.0.1:50051 (same Android node). Never connects to the Linux IC. Override via vendor.vhal.grpc.server sysprop only if running a non-standard topology. |
