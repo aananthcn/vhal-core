@@ -15,6 +15,12 @@ find_package(gRPC     REQUIRED CONFIG)
 # before the Conan-installed ones, causing protobuf version mismatch errors.
 # Use the Conan package folder variables (set by find_package via CMakeDeps) to
 # locate the exact binaries from the installed packages.
+#
+# For cross-compilation (e.g. building for RPi on x86_64): protobuf_PACKAGE_FOLDER_RELEASE
+# points to the target-arch (armv8) package, but protoc/grpc_cpp_plugin are build tools
+# that must run on the host machine. Conan deploys host-arch binaries under
+# full_deploy/build/ — derive that path by replacing "host" with "build" and
+# the target arch with the host arch.
 if(NOT protobuf_PACKAGE_FOLDER_RELEASE)
     message(FATAL_ERROR "protobuf_PACKAGE_FOLDER_RELEASE not set — run conan install first")
 endif()
@@ -22,10 +28,21 @@ if(NOT grpc_PACKAGE_FOLDER_RELEASE)
     message(FATAL_ERROR "grpc_PACKAGE_FOLDER_RELEASE not set — run conan install first")
 endif()
 
+if(CMAKE_CROSSCOMPILING)
+    string(REPLACE "/host/" "/build/" _pb_tool_folder   "${protobuf_PACKAGE_FOLDER_RELEASE}")
+    string(REPLACE "/host/" "/build/" _grpc_tool_folder "${grpc_PACKAGE_FOLDER_RELEASE}")
+    # Replace trailing target arch with host arch (e.g. /armv8 → /x86_64)
+    string(REGEX REPLACE "/[^/]+$" "/${CMAKE_HOST_SYSTEM_PROCESSOR}" _pb_tool_folder   "${_pb_tool_folder}")
+    string(REGEX REPLACE "/[^/]+$" "/${CMAKE_HOST_SYSTEM_PROCESSOR}" _grpc_tool_folder "${_grpc_tool_folder}")
+else()
+    set(_pb_tool_folder   "${protobuf_PACKAGE_FOLDER_RELEASE}")
+    set(_grpc_tool_folder "${grpc_PACKAGE_FOLDER_RELEASE}")
+endif()
+
 find_program(PROTOC_EXE NAMES protoc
-    PATHS "${protobuf_PACKAGE_FOLDER_RELEASE}/bin" NO_DEFAULT_PATH REQUIRED)
+    PATHS "${_pb_tool_folder}/bin" NO_DEFAULT_PATH REQUIRED)
 find_program(GRPC_CPP_PLUGIN NAMES grpc_cpp_plugin
-    PATHS "${grpc_PACKAGE_FOLDER_RELEASE}/bin" NO_DEFAULT_PATH REQUIRED)
+    PATHS "${_grpc_tool_folder}/bin" NO_DEFAULT_PATH REQUIRED)
 
 message(STATUS "Using protoc:          ${PROTOC_EXE}")
 message(STATUS "Using grpc_cpp_plugin: ${GRPC_CPP_PLUGIN}")
