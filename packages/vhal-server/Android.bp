@@ -31,8 +31,16 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
+prebuilt_etc {
+    name: "VelanProperties.json",
+    vendor: true,
+    src: "aidl/impl/4/default_config/config/VelanProperties.json",
+    sub_dir: "automotive/vhalconfig",
+}
+
 cc_binary {
     name: "vhal-core-server",
+    required: ["VelanProperties.json"],
     vendor: true,
     defaults: [
         "VehicleHalDefaults",

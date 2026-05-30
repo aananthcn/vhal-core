@@ -9,6 +9,15 @@
             },
             "access": "VehiclePropertyAccess::READ_WRITE",
             "changeMode": "VehiclePropertyChangeMode::ON_CHANGE"
+        },
+        {
+            "comment": "VOICE_ASSIST_STATE — 0x21400002 (VENDOR | GLOBAL | INT32 | 0x0002). int32_values[0]: 0=IDLE 1=LISTENING 2=RECORDING 3=THINKING 4=TALKING",
+            "property": 557842434,
+            "defaultValue": {
+                "int32Values": [0]
+            },
+            "access": "VehiclePropertyAccess::READ",
+            "changeMode": "VehiclePropertyChangeMode::ON_CHANGE"
         }
     ]
 }
