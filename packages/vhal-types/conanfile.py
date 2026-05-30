@@ -45,12 +45,19 @@ class VhalTypesConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        self.cpp_info.components["VehicleHalUtils"].libs = ["VehicleHalUtils"]
-        self.cpp_info.components["VehicleHalUtils"].includedirs = ["include"]
+        inc = os.path.join(self.package_folder, "include")
+        lib = os.path.join(self.package_folder, "lib")
 
-        # Header-only components
         for comp in ("AidlPropertyHeaders", "AndroidStubs",
-                     "IVehicleHardware", "IVehicleGeneratedHeaders"):
-            self.cpp_info.components[comp].includedirs = ["include"]
+                     "IVehicleGeneratedHeaders", "IVehicleHardware"):
+            self.cpp_info.components[comp].includedirs = [inc]
             self.cpp_info.components[comp].libdirs = []
             self.cpp_info.components[comp].libs = []
+
+        self.cpp_info.components["VehicleHalUtils"].libs = ["VehicleHalUtils"]
+        self.cpp_info.components["VehicleHalUtils"].includedirs = [inc]
+        self.cpp_info.components["VehicleHalUtils"].libdirs = [lib]
+        self.cpp_info.components["VehicleHalUtils"].requires = [
+            "AidlPropertyHeaders",
+            "AndroidStubs",
+        ]

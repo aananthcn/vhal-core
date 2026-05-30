@@ -52,6 +52,13 @@ message(STATUS "Using grpc_cpp_plugin: ${GRPC_CPP_PLUGIN}")
 # ──────────────────────────────────────────────────────────────────────────────
 if(NOT TARGET VehicleHalUtils)
     find_package(vhal-types REQUIRED CONFIG)
+    # Conan find_package creates namespaced targets (vhal-types::Foo).
+    # Alias them to the plain names used throughout this file so both the
+    # Conan and add_subdirectory consumption paths work identically.
+    add_library(VehicleHalUtils     ALIAS vhal-types::VehicleHalUtils)
+    add_library(AidlPropertyHeaders ALIAS vhal-types::AidlPropertyHeaders)
+    add_library(AndroidStubs        ALIAS vhal-types::AndroidStubs)
+    add_library(IVehicleHardware    ALIAS vhal-types::IVehicleHardware)
 endif()
 
 # ──────────────────────────────────────────────────────────────────────────────

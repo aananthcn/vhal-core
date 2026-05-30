@@ -1,3 +1,4 @@
+import os
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 
@@ -41,12 +42,39 @@ class VhalIpcGrpcConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        for lib in ("VehicleHalProtos", "VehicleServerProtoStub",
-                    "VehicleHalProtoMessageConverter",
-                    "GRPCVehicleHardware", "GRPCVehicleProxyServer"):
-            self.cpp_info.components[lib].libs = [lib]
-            self.cpp_info.components[lib].includedirs = ["include"]
-            self.cpp_info.components[lib].requires = [
-                "vhal-types::VehicleHalUtils",
-                "grpc::grpc++",
-            ]
+        inc = os.path.join(self.package_folder, "include")
+        libdir = os.path.join(self.package_folder, "lib")
+
+        def _comp(name, requires):
+            self.cpp_info.components[name].libs = [name]
+            self.cpp_info.components[name].includedirs = [inc]
+            self.cpp_info.components[name].libdirs = [libdir]
+            self.cpp_info.components[name].requires = requires
+
+        # Mirror the target_link_libraries() graph in vhal-ipc-grpc/CMakeLists.txt.
+        # Same-package components are referenced by bare name; cross-package by pkg::comp.
+        # protobuf is a transitive dep via grpc — reference grpc::grpc++ only.
+        _comp("VehicleHalProtos", [
+            "grpc::grpc++",
+        ])
+        _comp("VehicleServerProtoStub", [
+            "VehicleHalProtos",
+            "grpc::grpc++",
+        ])
+        _comp("VehicleHalProtoMessageConverter", [
+            "VehicleHalProtos",
+            "vhal-types::VehicleHalUtils",
+            "grpc::grpc++",
+        ])
+        _comp("GRPCVehicleHardware", [
+            "VehicleServerProtoStub",
+            "VehicleHalProtoMessageConverter",
+            "vhal-types::IVehicleHardware",
+            "grpc::grpc++",
+        ])
+        _comp("GRPCVehicleProxyServer", [
+            "VehicleServerProtoStub",
+            "VehicleHalProtoMessageConverter",
+            "vhal-types::IVehicleHardware",
+            "grpc::grpc++",
+        ])
