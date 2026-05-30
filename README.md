@@ -120,13 +120,13 @@ PRODUCT_PACKAGES += android.hardware.automotive.vehicle@V4-grpc-service
 ```bash
 # From AOSP root — build vhal-core-server, vhal-bridge, and their dependencies:
 source build/envsetup.sh
-lunch aosp_rpi_car-bp4a-userdebug
+lunch aosp_rpi5_car-bp4a-userdebug
 mmm vendor/brcm/vhal-core
 ```
 
 Binaries produced:
-- `out/target/product/<device>/vendor/bin/vhal-core-server`
-- `out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service`
+- `out/target/product/rpi5/vendor/bin/vhal-core-server`
+- `out/target/product/rpi5/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service`
 
 #### Step 4 — Configure vhal-gateway on the Linux IC
 
@@ -162,12 +162,13 @@ Replace `192.168.10.20` with the actual Ethernet IP of the Android HU.
 #### Step 5 — Push and test without reflashing
 
 ```bash
-adb root && adb remount
+adb root
+adb shell mount -o remount,rw /vendor
 
 # Push both binaries
-adb push out/target/product/<device>/vendor/bin/vhal-core-server \
+adb push out/target/product/rpi5/vendor/bin/vhal-core-server \
          /vendor/bin/vhal-core-server
-adb push out/target/product/<device>/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service \
+adb push out/target/product/rpi5/vendor/bin/hw/android.hardware.automotive.vehicle@V4-grpc-service \
          /vendor/bin/hw/
 
 # Restart both services (vhal-core-server first — vhal-bridge depends on it)
@@ -183,8 +184,8 @@ With vhal-core running on the Linux IC, vhal-gateway configured to forward to th
 and both Android binaries running, a property injected on the Linux IC reaches Android:
 
 ```bash
-# On Linux IC — inject gear change to REVERSE
-python src/vhal-core/test/vhal/vhal_test_client.py --gear reverse --server 192.168.10.10
+# On Linux IC — inject gear change to REVERSE (run from vhal-core repo root)
+python test/vhal/vhal_test_client.py --gear reverse --server 192.168.10.10
 
 # On Android — verify it arrived via gateway → local vhal-core-server → vhal-bridge
 adb shell cmd car_service get-property-value 0x11400400 0
