@@ -8,7 +8,8 @@
                     "msgId": "ivi-basic",
                     "properties": [
                         {"id": "0x11400400", "desc": "GEAR_SELECTION"},
-                        {"id": "0x11600207", "desc": "PERF_VEHICLE_SPEED"}
+                        {"id": "0x11600207", "desc": "PERF_VEHICLE_SPEED"},
+                        {"id": "0x21400002", "desc": "VOICE_ASSIST_STATE"}
                     ]
                 }
             ]
