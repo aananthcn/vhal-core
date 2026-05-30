@@ -142,3 +142,13 @@ install(EXPORT vhal-types-targets
     NAMESPACE vhal-types::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vhal-types
 )
+
+# Generate a minimal Config.cmake so find_package(vhal-types) works when the
+# package is consumed from the CMake install tree (ic-rpi superbuild) rather
+# than via a Conan-generated config file.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/vhal-typesConfig.cmake"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/vhal-types-targets.cmake\")\n"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/vhal-typesConfig.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vhal-types
+)

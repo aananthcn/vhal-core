@@ -235,3 +235,12 @@ install(EXPORT vhal-ipc-grpc-targets
     NAMESPACE vhal-ipc-grpc::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vhal-ipc-grpc
 )
+
+# Generate a minimal Config.cmake so find_package(vhal-ipc-grpc) works when
+# consumed from the CMake install tree (ic-rpi superbuild) rather than via Conan.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/vhal-ipc-grpcConfig.cmake"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/vhal-ipc-grpc-targets.cmake\")\n"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/vhal-ipc-grpcConfig.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vhal-ipc-grpc
+)

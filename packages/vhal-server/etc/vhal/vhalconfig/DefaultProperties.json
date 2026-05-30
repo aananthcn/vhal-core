@@ -5267,6 +5267,18 @@
         },
         {
             "property": "VehicleProperty::CAMERA_SERVICE_CURRENT_STATE"
+        },
+        {
+            "property": 557842433,
+            "defaultValue": { "int32Values": [0] },
+            "access": "VehiclePropertyAccess::READ_WRITE",
+            "changeMode": "VehiclePropertyChangeMode::ON_CHANGE"
+        },
+        {
+            "property": 557842434,
+            "defaultValue": { "int32Values": [0] },
+            "access": "VehiclePropertyAccess::READ_WRITE",
+            "changeMode": "VehiclePropertyChangeMode::ON_CHANGE"
         }
     ]
 }

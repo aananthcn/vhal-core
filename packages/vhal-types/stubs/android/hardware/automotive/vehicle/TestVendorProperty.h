@@ -17,6 +17,8 @@ enum class TestVendorProperty : int32_t {
 
     // Velan voice assistant trigger. int32_values[0]: 0 = OFF, 1 = ON.
     VOICE_ASSIST_TRIGGER                  = 0x21400001,
+    // Velan voice assistant state. int32_values[0]: VoiceAssistantState enum (0=IDLE … 4=TALKING).
+    VOICE_ASSIST_STATE                    = 0x21400002,
 };
 
 } // namespace vehicle
